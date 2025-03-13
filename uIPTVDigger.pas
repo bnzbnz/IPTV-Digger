@@ -1,7 +1,7 @@
 (*****************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2020-2025 Laurent Meyer JsonX4@lmeyer.fr
+Copyright (c) 2020-2025 Laurent Meyer JsonX3@ea4d.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,154 +20,318 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-******************************************************************************)
+*******************************************************************************)
 unit uIPTVDigger;
 
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages,System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls, System.Net.HttpClient,
-  System.Net.HttpClientComponent, Vcl.OleCtrls, Vcl.Menus, Vcl.Clipbrd
-  , SysUtils, System.Net.URLClient
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ComCtrls,System.Win.TaskbarCore, Vcl.Taskbar,
+  Vcl.Menus, Vcl.Samples.Spin
+  , uThreadedHTTPGet
   , RTTI, uJX4Object, uJX4List
-  , System.Generics.Collections, Vcl.AppEvnts
   ;
 
+
 const
-  APPTitle = 'IPTV Digger v1.0';
-  APPFile  = 'IPTVDigger';
+  APPTitle = 'IPTV Digger v1.0 Beta 3';
+  APPFile  = 'IPTV-Digger';
+
 type
-  TIPTVPrefs = class(TJX4Object)
-    Ver: TValue;
-    Edt: TValue;
-    Ply: TValue;
-    Url: TValue;
-    Fav: TJX4ListOfValues;
+
+  TSettings = class(TJX4Object)
+    M3U: TValue;
+    Query: TValue;
+    Player: TValue;
+    MaxValues: TValue;
+    Refresh: TValue;
+    [JX4Defaault(True)]
+    OnTop: TValue;
+    Favorites: TJX4ListOfValues;
   end;
 
-  TIPTVChannel =  class
-    Raw: string;
-    Hash: string;
-    Id: string;
-    Name: string;
-    Lang: string;
-    Group: string;
-    Cat: string;
-    LogoURL: string;
-    Origin: string;
-    Title: string;
-    IsMovie: Boolean;
-    URL: string;
-    UID: string;
-  end;
-
-  TIPTV = class
-   Channels: TObjectList<TIPTVChannel>;
-   Categories: TObjectDictionary<string, TObjectList<TIPTVChannel>>;
-   Languages:  TObjectDictionary<string, TObjectList<TIPTVChannel>>;
-   constructor  Create; overload;
-   destructor   Destroy; override;
-  end;
-
-  TForm1 = class(TForm)
-    StatusBar: TStatusBar;
-    OpenDialog: TFileOpenDialog;
-    Timer1: TTimer;
-    PMEdit: TPopupMenu;
-    PopupMenu11: TMenuItem;
-    PageControl1: TPageControl;
+  TIPTVForm = class(TForm)
+    PC: TPageControl;
     TabSheet1: TTabSheet;
+    ProgressBar: TProgressBar;
     TabSheet2: TTabSheet;
-    TabSheet3: TTabSheet;
-    Button1: TButton;
-    CB_Players: TComboBox;
-    Label5: TLabel;
-    Edit1: TEdit;
+    EQuery: TEdit;
     LB_Canals: TListBox;
+    TabSheet3: TTabSheet;
     LB_Fav: TListBox;
-    HTTP: TNetHTTPClient;
-    PMRemove: TPopupMenu;
-    Remove1: TMenuItem;
-    Button2: TButton;
+    StatusBar: TStatusBar;
+    EM3U: TEdit;
     Label1: TLabel;
-    Label3: TLabel;
     Label2: TLabel;
-    N1: TMenuItem;
-    Import1: TMenuItem;
-    Export1: TMenuItem;
-    CopyTitle1: TMenuItem;
-    N2: TMenuItem;
-    CopyURL1: TMenuItem;
-    Timer2: TTimer;
-    Raw1: TMenuItem;
-    Play1: TMenuItem;
-    MPStatusBar: TPopupMenu;
-    RefreshM3UData1: TMenuItem;
-    procedure Button1Click(Sender: TObject);
+    CBPlayers: TComboBox;
+    Label3: TLabel;
+    SPMaxVal: TSpinEdit;
+    PPQuery: TPopupMenu;
+    AddQuerytoFavorites1: TMenuItem;
+    PPFav: TPopupMenu;
+    Open1: TMenuItem;
+    Remove1: TMenuItem;
+    Label4: TLabel;
+    SERefresh: TSpinEdit;
+    CBOnTop: TCheckBox;
+    Taskbar: TTaskbar;
     procedure FormCreate(Sender: TObject);
-    procedure FormShow(Sender: TObject);
-    procedure LB_CanalsDblClick(Sender: TObject);
-    procedure Edit1KeyPress(Sender: TObject; var Key: Char);
     procedure FormDestroy(Sender: TObject);
-    procedure Timer1Timer(Sender: TObject);
-    procedure HTTPRequestCompleted(const Sender: TObject;
-      const AResponse: IHTTPResponse);
-    procedure Edit1DblClick(Sender: TObject);
-    procedure PopupMenu11Click(Sender: TObject);
-    procedure Remove1Click(Sender: TObject);
+    procedure EQueryKeyPress(Sender: TObject; var Key: Char);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure LB_FavDblClick(Sender: TObject);
-    procedure Button2Click(Sender: TObject);
-    procedure HTTPRequestException(const Sender: TObject;
-      const AError: Exception);
-    procedure Label3Click(Sender: TObject);
-    procedure Label3MouseEnter(Sender: TObject);
-    procedure Label3MouseLeave(Sender: TObject);
-    procedure Label1Click(Sender: TObject);
-    procedure CopyTitle1Click(Sender: TObject);
-    procedure CopyURL1Click(Sender: TObject);
-    procedure ApplicationEvents1Minimize(Sender: TObject);
-    procedure TrayIcon1Click(Sender: TObject);
-    procedure ApplicationEvents1Restore(Sender: TObject);
-    procedure Timer2Timer(Sender: TObject);
-    procedure Raw1Click(Sender: TObject);
-    procedure Play(Sender: TObject);
-    procedure FormResize(Sender: TObject);
-    procedure HTTPReceiveDataEx(const Sender: TObject; AContentLength,
-      AReadCount: Int64; AChunk: Pointer; AChunkLength: Cardinal;
-      var AAbort: Boolean);
-    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
-    procedure LB_CanalsClick(Sender: TObject);
-    procedure RefreshM3UData1Click(Sender: TObject);
+    procedure LB_CanalsDblClick(Sender: TObject);
+    procedure EM3U2KeyPressed(Sender: TObject; var Key: Char);
+    procedure AddQuerytoFavorites1Click(Sender: TObject);
+    procedure Open1Click(Sender: TObject);
+    procedure Remove1Click(Sender: TObject);
+    procedure CBOnTopClick(Sender: TObject);
   private
     { Private declarations }
-    procedure Log(AStr: string; Panel: Integer = 0);
+    procedure Log(AMsg: string; APanel: integer = 0);
+    procedure Play(URL: string; Player: Integer);
   public
-    { Public declarations }
-    TV: TIPTV;
+    CList: TStringList;
+    HTTPUrl: string;
     HTTPStream: TStringStream;
-    CurURL: string;
-    function  BuildM3UFile(Filename: string): Boolean;
-    function  ShowChannels: Boolean;
+    HTTPRaw: THTTPGetThread;
+
+    procedure HTTPProgress(ASender: THTTPGetThread; Progress: Integer);
+    procedure HTTPCompleted(ASender: THTTPGetThread; IsTerminated: Boolean; IsAsync: Boolean);
+    procedure DownloadM3U(AUrl: string);
+    procedure ShowChannels;
   end;
 
 var
-  Form1: TForm1;
+  IPTVForm: TIPTVForm;
 
 implementation
 uses
-  StrUtils
-  , System.Character
-  , ShellAPI
-  , Registry
+    ShellAPI
   , System.IOUtils
-  , System.Hash
-  , IdGlobal
-  , IdURI
-  , System.Types
+  , System.Character
+  , IdUri
+  , Registry
   ;
-
 {$R *.dfm}
+
+// Simple obfucation
+function XOREncrypt(AKey: Byte; AStr: string): string;
+var
+  Stream: TStringStream;
+  LIdx: Integer;
+  LVal: Byte;
+begin
+  Stream := TStringStream.Create(AStr);
+  try
+    for LIdx := 1 to Length(AStr) do
+    begin
+      LVal := AKey xor ord(AStr[LIdx]);
+      AKey := LVal;
+      Stream.WriteData(Byte(Lval));
+    end;
+    Result := Stream.DataString;
+  finally
+    Stream.Free;
+  end;
+end;
+
+function XORDecrypt(AKey: Byte; AStr: string): string;
+var
+  LVal: Byte;
+  LVal2: Byte;
+  Stream: TStringStream;
+begin
+  Result := '';
+  Stream := TStringStream.Create(AStr);
+  try
+  while(Stream.Position < Stream.Size) do
+  begin
+    Stream.read(LVal, 1);
+    LVal2 := AKey xor LVal;
+    AKey := LVal;
+    Result := Result + Chr(LVal2);
+  end;
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TIPTVForm.Log(AMsg: string; APanel: integer);
+begin
+  StatusBar.Panels[APanel].Text:= AMsg;
+end;
+
+procedure TIPTVForm.Open1Click(Sender: TObject);
+begin
+  LB_FavDblClick(Sender);
+end;
+
+procedure TIPTVForm.AddQuerytoFavorites1Click(Sender: TObject);
+begin
+  LB_Fav.AddItem(Trim(EQuery.text), Nil);
+end;
+
+procedure TIPTVForm.CBOnTopClick(Sender: TObject);
+begin
+  if CBOnTop.Checked then
+    Self.FormStyle := fsStayOnTop
+  else
+    Self.FormStyle := fsNormal;
+end;
+
+procedure TIPTVForm.DownloadM3U(AUrl: string);
+begin
+  if HTTPUrl.IsEmpty then Exit;
+  HTTPStream.Clear;
+  HTTPRaw.Free;
+  ProgressBar.Visible := True;
+  ProgressBar.Style := pbstMarquee;
+  HTTPRaw := THTTPGetThread.Create(AUrl, HTTPStream, Nil, HTTPCompleted, HTTPProgress);
+end;
+
+procedure TIPTVForm.EQueryKeyPress(Sender: TObject; var Key: Char);
+begin
+  if ord(Key) = VK_RETURN then
+  begin
+    Key := #0;
+    ShowChannels;
+  end
+end;
+
+procedure TIPTVForm.EM3U2KeyPressed(Sender: TObject; var Key: Char);
+var
+  LURL: string;
+  LUri: TidURI;
+  LSl : TStringList;
+begin
+  LSl := Nil;
+  LUri := Nil;
+  try
+    if ord(Key) = VK_RETURN  then
+    begin
+      Key := #0;
+      if Trim(EM3U.Text).IsEmpty then Exit;
+      LUri := TIdURI.Create(Trim(EM3U.Text));
+      LURL := LURI.Protocol + '://' + LUri.Host + '/' + LUri.Document + '?username=';
+      LSl := TStringList.Create(#0, '&', [soStrictDelimiter]);
+      LSl.DelimitedText := LUri.Params;
+      HTTPUrl := LUrl + LSl.Values['username'] + '&password=' + LSl.Values['password'] + '&type=m3u_plus&output=ts';
+      DownloadM3U( LUrl + LSl.Values['username'] + '&password=' + LSl.Values['password'] + '&type=m3u_plus&output=ts');
+    end;
+  finally
+    LSl.Free;
+    LUri.Free
+  end;
+end;
+
+procedure TIPTVForm.FormClose(Sender: TObject; var Action: TCloseAction);
+var
+  LSettings: TSettings;
+  LStr: string;
+begin
+  LSettings := TSettings.Create;
+  LSettings.M3U := XOREncrypt($B9, HTTPUrl);
+  LSettings.Query := Trim(EQuery.Text);
+  LSettings.Player := CBPlayers.ItemIndex;
+  LSettings.MaxValues := SPMaxVal.Value;
+  LSettings.Refresh := SERefresh.Value;
+  LSettings.OnTop := CBOnTop.Checked;
+  for LStr in LB_Fav.Items do LSettings.Favorites.Add(LStr);
+  LSettings.SaveToJSONFile(TPath.GetHomePath + '\' + APPFile + '\Settings.json', TEncoding.UTF8);
+  LSettings.Free;
+end;
+
+procedure TIPTVForm.FormCreate(Sender: TObject);
+var
+  LSettings: TSettings;
+  LTVal: TValue;
+begin
+  Log('Start Up');
+  Caption := APPTitle;
+  CList := TStringList.Create;
+  HTTPStream := TStringStream.Create;
+  HTTPRaw    := Nil;
+  CreateDir(TPath.GetHomePath + '\' + APPFile );
+
+  if FileExists(TPath.GetHomePath + '\' + APPFile + '\Settings.json') then
+  begin
+    LSettings := TJX4Object.LoadFromJSONFile<TSettings>(TPath.GetHomePath + '\' + APPFile + '\Settings.json');
+    try
+      try
+        HTTPUrl := XORDecrypt($B9, LSettings.M3U.AsString);
+        EM3U.Text := HTTPUrl;
+        EQuery.Text := LSettings.Query.AsString;
+        CBPlayers.ItemIndex := LSettings.Player.AsInteger;
+        SPMaxVal.Value := LSettings.MaxValues.AsInteger;
+        CBOnTop.Checked := LSettings.OnTop.AsBoolean;
+        CBOnTopClick(Self);
+        if not LSettings.Refresh.IsEmpty then SERefresh.Value := LSettings.Refresh.AsInteger;
+        for LTVal in LSettings.Favorites do LB_Fav.AddItem(LTVal.AsString, Nil);
+      except end;
+    finally
+      LSettings.Free;
+    end;
+
+    if FileExists(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3x') then
+      CList.LoadFromFile(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3x', TEncoding.UTF8);
+
+    PC.ActivePage := TabSheet2;
+    Log('Connecting to M3U Server, it may take a while');
+    DownloadM3U(HTTPUrl);
+    ShowChannels;
+
+  end else begin
+    ShowMessage('IPTV Digger does not offer any IPTV channel services. You have to provide your own IPTV M3U URL');
+    Self.PC.ActivePage := TabSheet1;
+  end;
+
+  var LAppBarData: TAppBarData;
+  LAppBarData.cbSize := SizeOf(TAppBarData);
+  SHAppBarMessage(ABM_GETTASKBARPOS, LAppBarData);
+  Left := LAppBarData.rc.Right - Width;
+  Top := LAppBarData.rc.Top - Height;
+end;
+
+procedure TIPTVForm.FormDestroy(Sender: TObject);
+begin
+  HTTPRaw.Free;
+  HTTPStream.Free;
+  CList.Free;
+end;
+
+procedure TIPTVForm.HTTPProgress(ASender: THTTPGetThread; Progress: Integer);
+begin
+  ProgressBar.Visible := True;
+  ProgressBar.Style := pbstNormal;
+  ProgressBar.Position := Progress;
+  Log(Format('Loading M3U :  %d %%', [Progress]));
+end;
+
+procedure TIPTVForm.LB_CanalsDblClick(Sender: TObject);
+var
+  LIdx: integer;
+  LURL: string;
+begin
+  LIdx := LB_Canals.ItemIndex;
+  if LIdx = -1 then Exit;
+  LIdx := Integer(LB_Canals.ItEms.Objects[LIdx]);
+  if LIdx = -1 then Exit;
+  LURL := XORDecrypt($AF, CList[LIdx + 2]);
+  Play(LURL, CBPlayers.ItemIndex);
+end;
+
+procedure TIPTVForm.LB_FavDblClick(Sender: TObject);
+var
+  LIdx: integer;
+begin
+  LIdx := LB_Fav.ItemIndex;
+  if LIdx = -1 then Exit;
+  EQuery.Text := LB_Fav.Items[LIdx];
+  Self.PC.ActivePage := TabSheet2;
+  ShowChannels;
+end;
 
 procedure GetQuotedFields(AList: TStringList; const AStr: string; ASeparator: Char = ',');
 var
@@ -200,303 +364,187 @@ begin
   if Length(Field) > 0 then AList.Add(Field);
 end;
 
-function XOREncrypt(Key: Byte; Str: string): string;
+function Parse(ALine: string; var  ATitle: string; var ALang: string): boolean;
 var
-  Stream: TStringStream;
-begin
-  Stream := TStringStream.Create(Str);
-  try
-    for var i := 1 to Length(Str) do
-    begin
-      var a := Key xor ord(Str[i]);
-      Key := a;
-      Stream.WriteData(Byte(a));
-    end;
-    Result := Stream.DataString;
-  finally
-    Stream.Free;
-  end;
-end;
-
-function XORDecrypt(Key: Byte; Str: string): string;
-var
-  c: Byte;
-  Stream: TStringStream;
-begin
-  Result := '';
-  Stream := TStringStream.Create(Str);
-  try
-  while(Stream.Position < Stream.Size) do
-  begin
-    Stream.read(c, 1);
-    var a := Key xor c;
-    Key := c;
-    Result := Result + chr(a);
-  end;
-  finally
-    Stream.Free;
-  end;
-end;
-
-procedure TForm1.ApplicationEvents1Minimize(Sender: TObject);
-begin
-  // Hide;
-end;
-
-procedure TForm1.ApplicationEvents1Restore(Sender: TObject);
-begin
-  Show;
-  BringToFront;
-end;
-
-function TForm1.BuildM3UFile(Filename: string): Boolean;
-var
-
-  LLines: TStringList;
-  LIdx : Integer;
-  LSs: TStringStream;
-  LCanal: TIPTVChannel;
-  LCurCat: string;
   LParts : TArray<string>;
-  LSubParts : TStringList;
   LTitleParts : TArray<string>;
-  LFileName: string;
-  LUri: TIdUri;
-  LLang: TObjectList<TIPTVChannel>;
-  LCat: TObjectList<TIPTVChannel>;
-  LPair: TPair<string, TObjectList<TIPTVChannel>>;
-
+  LSubParts: TStringList;
+  LLangParts: TArray<string>;
+  LName: string;
 begin
-  Log ('Building Playlist');
   Result := False;
-  LSs := Nil;
-  LLines := Nil;
-  LSubParts:= Nil;
-  LIdx := 0;
-  LCurCat := '';
-
+  LSubParts := Nil;
   try
   try
-    if not FileExists(Filename) then Exit;
-    TV.Channels.Clear;
-    TV.Categories.Clear;
-    TV.Languages.Clear;
+   LParts    :=  ALine.Split([','], '"', '"',  99);
+   LSubParts := TStringList.Create;
+   GetQuotedFields(LSubParts, LParts[0], ' ');
+   LName := LSubParts.Values['tvg-name'].DeQuotedString('"').Trim;
+   if LName.Trim.StartsWith('#') then Exit;
 
-    StatusBar.Panels[0].Text := 'Building Playlist';
-    LSs := TStringStream.Create('', TEncoding.UTF8);
-    LSs.LoadFromFile(Filename);
-    if LSs.size = 0 then Exit;
-    LSubParts := TStringList.Create;
-    LLines := TStringList.Create;
-    LLines.StrictDelimiter := True;
-    LLines.Text := LSs.DataString;
-    if LLines[LIdx].ToUpper.Trim <> '#EXTM3U' then Exit;
-    if Pos('#EXTINF:-1', LLines[LIdx + 1].ToUpper.Trim) <> 1 then Exit;
-    LIdx := 1;
-    while LIdx + 2 < LLines.count do
+   If Length(LParts) = 1 then  ATitle := LName else
     begin
-      if not LLines[LIdx].ToUpper.StartsWith('#EXTINF:-1') then
-      begin
-        Inc(LIdx, 2);
-        Break
-      end;
-
-      LCanal := TIPTVChannel.Create;
-
-      LCanal.URL := LLines[LIdx + 1];
-
-      LParts    :=  LLines[LIdx].Split([','], '"', '"',  99);
-      GetQuotedFields(LSubParts, LParts[0], ' ');
-
-      LCanal.Raw := LLines[LIdx];
-      LCanal.Id := LSubParts.Values['tvg-id'].DeQuotedString('"').Trim;
-      LCanal.Name := LSubParts.Values['tvg-name'].DeQuotedString('"').Trim;
-      LCanal.LogoUrl := LSubParts.Values['tvg-logo'].DeQuotedString('"').Trim;
-      LCanal.Group := LSubParts.Values['group-title'].DeQuotedString('"').Trim;
-      LCanal.IsMovie := not ExtractFileExt(LCanal.URL).Trim.IsEmpty;
-
-
-      // Title
-
-      If Length(LParts) = 1 then LCanal.Title := LCanal.Name else
-      begin
-        LCanal.Title := LParts[1];
-        for var i := 2 to Length(LParts) - 1 do LCanal.Title :=  LCanal.Title + ' ' + LParts[i];
-      end;
-      LCanal.Title := LCanal.Title.Trim;
-      LTitleParts := LCanal.Title.Trim.Split(['[', ']', '- ', '|', ':', '_'], 99);
-      if Length(LTitleParts) <= 1 then LCanal.Title := LTitleParts[0].Trim else
-      begin
-        LCanal.Title := LTitleParts[1];
-        for var i := 2 to Length(LTitleParts) - 1 do LCanal.Title := LCanal.Title + ', ' + LTitleParts[i];
-      end;
-
-      // Language
-
-      var LangArray: TArray<string> :=  LCanal.Name.Split(['[', ']', ' - ', '|', ':', '_'], '"', '"', 999999);
-      if (Length(LangArray) > 1) then // and (Length(LangArray[0].Trim) <= 12) then
-      begin
-        LCanal.Lang := '';  LangArray[0] := LangArray[0].Trim;
-        for var i := 1  to Length(LangArray[0]) do if IsLetterOrDigit(LangArray[0][i]) then
-          LCanal.Lang :=  LCanal.Lang + LangArray[0][i];
-        if LCanal.lang.Trim.IsEmpty then LCanal.lang := '???';
-        if TV.Languages.TryGetValue(LCanal.Lang, LLang)  then
-        begin
-          LLang.Add(LCanal);
-        end else begin
-          LLang := TObjectList<TIPTVChannel>.Create(False);
-          LLang.Add(LCanal);
-          TV.Languages.TryAdd(LCanal.Lang, LLang);
-        end;
-      end;
-
-      // Categories & Save
-
-      if LCanal.Name.Trim.StartsWith('#') then
-      begin
-        LCurCat := LCanal.name.trim.Replace('#','',[rfReplaceAll]).Replace('[','',[]).Replace(']','',[]).Replace('|','',[rfReplaceAll]).Trim;
-        if not TV.Categories.TryGetValue(LCurCat, LCat)  then
-        begin
-          LCat := TObjectList<TIPTVChannel>.Create(False);
-          LCat.Add(LCanal);
-          TV.Categories.TryAdd(LCurCat, LCat);
-        end else begin
-          LCat.Add(LCanal);
-        end;
-        LCanal.Free;
-      end else begin
-        if not LCanal.Lang.IsEmpty then LCanal.Title := LCanal.Title.Join(': ', [LCanal.Lang, LCanal.Title]).Trim;
-        LCanal.Cat := LCurCat;
-        TV.Channels.Add(LCanal);
-      end;
-
-      Inc(LIdx, 2);
+      ATitle := LParts[1];
+      for var i := 2 to Length(LParts) - 1 do ATitle :=  ATitle + ' ' + LParts[i];
+    end;
+    ATitle := ATitle.Trim;
+    LTitleParts := ATitle.Trim.Split(['[', ']', '- ', '|', ':', '_'], 99);
+    if Length(LTitleParts) <= 1 then ATitle := LTitleParts[0].Trim else
+    begin
+      ATitle := LTitleParts[1];
+      for var i := 2 to Length(LTitleParts) - 1 do ATitle := ATitle + ', ' + LTitleParts[i];
     end;
 
-    Result := TV.Channels.Count > 0;
-    if Result then
+    LLangParts :=  LName.Split(['[', ']', ' - ', '|', ':', '_'], '"', '"', 99);
+    if (Length(LLangParts) > 1) then // and (Length(LangArray[0].Trim) <= 12) then
     begin
-      CreateDir(TPath.GetHomePath + '\'+APPFile);
-      LSs.SaveToFile(TPath.GetHomePath + '\' + APPFile +'\Playlist.m3u');
-    end;
+      ALang := '';  LLangParts[0] := LLangParts[0].Trim;
+      for var i := 1  to Length(LLangParts[0]) do if IsLetterOrDigit(LLangParts[0][i]) then
+        ALang :=  ALang + LLangParts[0][i];
+      if ALang.Trim.IsEmpty then
+      begin
+        if (Length(LLangParts) > 1) and LLangParts[0].Trim.IsEmpty then
+          ALang := LLangParts[1]
+        else
+          ALang := '???';
+      end;
 
+      Result := True;
+    end;
+    ATitle := ATitle.Trim;
+    ALang := ALang.Trim;
   finally
     LSubParts.Free;
-    LSs.Free;
-    LLInes.Free;
-    if Result then
-    Log ('Ready')
-    else
-      Log ('Failed, Please Get a Valid M3U');
   end;
   except
     Result := False;
   end;
-
 end;
 
-procedure TForm1.Log(AStr: string; Panel: Integer);
-begin
-  if csDestroying in Self.ComponentState then Exit;
-  StatusBar.Panels[Panel].Text := AStr;
-  StatusBar.Refresh; statusbar.Repaint;
-end;
-
-procedure TForm1.Play(Sender: TObject);
-begin
-  if LB_Canals.ItemIndex <> -1  then
-    LB_CanalsDblClick(Self);
-end;
-
-procedure TForm1.PopupMenu11Click(Sender: TObject);
-begin
-  if LB_Fav.Items.IndexOf(Edit1.Text) = -1  then
-   LB_Fav.AddItem(Edit1.Text, Nil);
-end;
-
-procedure TForm1.Raw1Click(Sender: TObject);
-begin
- if LB_Canals.ItemIndex = - 1 then Exit;
-    InputBox('Raw Data :', '', TIPTVChannel(LB_Canals.Items.Objects[LB_Canals.ItemIndex]).Raw);
-end;
-
-procedure TForm1.RefreshM3UData1Click(Sender: TObject);
-begin
-  Timer2Timer(Self);
-end;
-
-procedure TForm1.Remove1Click(Sender: TObject);
-begin
-  LB_Fav.Items.Delete(LB_Fav.ItemIndex);
-end;
-
-procedure TForm1.Timer1Timer(Sender: TObject);
+procedure TIPTVForm.HTTPCompleted(ASender: THTTPGetThread; IsTerminated: Boolean; IsAsync: Boolean);
 var
-  LFilename : string;
+  LIdx: integer;
+  LList: TStringList;
+  LTempList: TStringList;
+  LTitle, LLang: string;
 begin
-  Timer1.Enabled := False;
-  LFilename := TPath.GetHomePath + '\' + APPFile + '\Playlist.m3u';
-  if FileExists(LFilename) then
+  if IsAsync then
   begin
-    if BuildM3UFile(LFilename) then
+    if not Assigned(ASender.Result) then Exit;
+    if ASender.Result.StatusCode <> 200 then Exit;
+    try
+      LList := Nil; LTempList := Nil;
+      if not (TStringStream(THTTPGetThread(ASender).Stream).ReadString(8) = '#EXTM3U'+#$A) then Exit;
+      LTempList:= TStringList.Create;
+      LTempList.StrictDelimiter := False;
+      try
+      try
+        LTempList.Text := TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 );
+        TStringStream(THTTPGetThread(ASender).Stream).Clear;
+
+        LList :=  TStringList.Create;;
+        THTTPGetThread(ASender).UserObj := LList;
+        LIdx := 0;
+        while LIdx < LTempList.count - 2  do
+        begin
+          if LTempList[LIdx].ToUpper.StartsWith('#EXTINF:-1') then
+          begin
+            if Parse(LTempList[LIdx], LTitle, LLang) then
+            begin
+              LList.Add(LLang + ': ' + LTitle);
+              LList.Add(LTempList[LIdx]);
+              LList.Add(XOREncrypt($AF, LTempList[LIdx + 1]));
+            end;
+          end;
+          Inc(LIdx, 2);
+        end;
+        LList.SaveToFile(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3x', TEncoding.UTF8);
+      except
+        FreeAndNil(THTTPGetThread(ASender).UserObj);
+      end;
+      finally
+        TStringStream(THTTPGetThread(ASender).Stream).Clear;
+        LTempList.Free;
+      end;
+    except
+    end;
+  end else begin // IsAsync
+    if Assigned(ASender.Result) and (ASender.Result.StatusCode = 200) then
     begin
-      Log('Ready');
-      ShowChannels;
-    end else Log('Failed');
-  end else
-    PageControl1.ActivePage := TabSheet3;
+       HTTPUrl := ASender.URL;
+       LList := TStringList(THTTPGetThread(ASender).UserObj);
+       CList.Free; CList := LList;
+       ShowChannels;
+       Log('');
+    end else
+      FreeAndNil(THTTPGetThread(ASender).UserObj);
+    ProgressBar.Visible := False;
+  end;
 end;
 
-
-procedure TForm1.Timer2Timer(Sender: TObject);
-begin
-   if Timer2.Enabled and  not CurURL.Trim.IsEmpty then
-   begin
-     PageControl1.Enabled := FileExists(TPath.GetHomePath + '\' + APPFile +'\Playlist.m3u');
-     Timer2.Enabled := False;
-     HTTPStream.Clear;
-     Log('Refreshing M3U Data');
-     HTTP.Get(CurURL, HTTPStream);
-   end;
-end;
-
-procedure TForm1.TrayIcon1Click(Sender: TObject);
-begin
-  Self.WindowState := wsNormal;
-  Application.RestoreTopMosts;
-end;
-
-procedure TForm1.Label1Click(Sender: TObject);
-begin
-  ShellExecute(0, 'open', PChar('mailto:IPTV@lmeyer.fr'), nil, nil, SW_SHOWNORMAL);
-end;
-
-procedure TForm1.Label3Click(Sender: TObject);
-begin
-  ShellExecute(0, 'open', PChar('https://github.com/bnzbnz/' + APPFile), nil, nil, SW_SHOWNORMAL);
-end;
-
-procedure TForm1.Label3MouseEnter(Sender: TObject);
-begin
-  Screen.Cursor := crHandPoint;
-end;
-
-procedure TForm1.Label3MouseLeave(Sender: TObject);
-begin
-  Screen.Cursor := crDefault;
-end;
-
-procedure TForm1.LB_CanalsClick(Sender: TObject);
+function Match(ALine: string; AWords: TStringList): Boolean;
 var
-  Item : TIPTVChannel;
+  LWord: string;
+  LMatch: Boolean;
 begin
-  if LB_Canals.ItemIndex = - 1 then Exit;
-  Item :=  TIPTVChannel(LB_Canals.Items.Objects[LB_Canals.ItemIndex]);
-  if Assigned(Item) then
-    LB_Canals.Hint := Item.Title + sLineBreak + Item.Group;
+  Result := False;
+  ALine := ALine.ToLower;
+  Result := True;
+  for LWord in AWords do
+  begin
+    if  LWord.IsEmpty then Continue;
+
+    if LWord[1] = '-' then
+      Result := Result and not (Pos( Copy(LWord, 2),  ALine) > 0)
+    else
+      Result := Result and ( Pos(LWord, ALine) > 0 );
+
+    if not Result then Break;
+  end;
 end;
 
-procedure TForm1.LB_CanalsDblClick(Sender: TObject);
+procedure TIPTVForm.ShowChannels;
+var
+  LIdx: integer;
+  LWords: TStringList;
+begin
+  LB_Canals.Clear;
+  LB_Canals.Sorted := True;
+  if CList.Count = 0 then Exit;
+  if (Trim(EQuery.Text).IsEmpty) then
+  begin
+    LB_Canals.Sorted := False;
+    LB_Canals.AddItem('Please define a Query and Press "Enter"...',  Nil);
+    LB_Canals.AddItem('Default : is Inclusive: DEMO EN:',  Nil);
+    LB_Canals.AddItem('- : is exclusive: DEMO SWE -AFR',  Nil);
+    LB_Canals.AddItem('"" : for sentences: "DEMO NL" -AFR',  Nil);
+    LB_Canals.AddItem('Ex: ''AMAZON PRIME FR:'' French Amazon Prime',Nil);
+    LB_Canals.AddItem('Ex: ''CANAL AFR'' African Canal+', Nil);
+    LB_Canals.AddItem('Ex: ''DAZN BE:'' = Belgium DAZN', Nil);
+    LB_Canals.AddItem('Ex: ''"BEIN SPORT" UK:'' =  UK BEIN SPORTS', Nil);
+    LB_Canals.AddItem('Ex: ''"SKY SPORT" UK: F1'' =  UK SKY SPORTS, F1 channels', Nil);
+    LB_Canals.AddItem('...', Nil);
+    Exit;
+  end;
+  LWords := TStringList.Create;
+  GetQuotedFields(LWords, Trim(EQuery.Text).ToLower, ' ');
+  LIdx := 0;
+  while( LIdx < CList.Count - 3 ) do
+  begin
+    if LB_Canals.Count > SPMaxVal.Value then
+    begin
+      LB_Canals.Sorted := False;
+      LB_Canals.AddItem('...and more...', Tobject(-1));
+      Break;
+    end;
+    if Match(CList[LIdx], LWords) then
+      LB_Canals.AddItem(CList[LIdx], TOBject(LIdx));
+    Inc(LIdx, 3);
+  end;
+  LWords.Free;
+end;
+
+procedure TIPTVForm.Play(URL: string; Player: Integer);
 
   function GetEnvVarValue(const VarName: string): string;
   var
@@ -522,24 +570,26 @@ begin
   Reg := TRegistry.Create(KEY_READ);
   Reg.RootKey := HKEY_LOCAL_MACHINE;
   try
-    if not Assigned(LB_Canals.iTems.Objects[LB_Canals.ItemIndex]) then Exit;
-    case CB_Players.ItemIndex of
+    if URL.Trim.IsEmpty then Exit;
+    case Player of
       0:  begin
             if not Reg.OpenKey('SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\wmplayer.exe', False) then Exit;
             LApp := Reg.ReadString('Path').Replace('%ProgramFiles(x86)%', GetEnvVarValue('ProgramFiles(x86)')) + '\wmplayer.exe';
-            LParam := ' /play "' + TIPTVChannel(LB_Canals.iTems.Objects[LB_Canals.ItemIndex]).URL + '"';
+            LParam := ' /play "' + URL + '"';
             ShellExecute(0, '', PChar(LApp), PChar(LParam), nil , SW_SHOWNORMAL);
           end;
       1:  begin
             if not Reg.OpenKey('SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe', False) then Exit;
             LApp := Reg.ReadString('Path') + '\vlc.exe';
-            LParam := ' --one-instance ' + TIPTVChannel(LB_Canals.iTems.Objects[LB_Canals.ItemIndex]).URL;
+            LParam := ' --one-instance ' + URL;
+            if (GetKeyState(VK_CONTROL)<0) then LParam := URL;
             ShellExecute(0, '', PChar(LApp), PChar(LParam), nil , SW_SHOWNORMAL);
           end;
       2:  begin
             if not Reg.OpenKey('SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\PotPlayerMini64.exe', False) then Exit;
             LApp := Reg.ReadString('Path').Trim.DeQuotedString('"');
-            LParam := TIPTVChannel(LB_Canals.iTems.Objects[LB_Canals.ItemIndex]).URL + ' /current /play';
+            LParam := URL + ' /current /play';
+            if (GetKeyState(VK_CONTROL)<0) then LParam := URL + ' /play';
             ShellExecute(0, '', PChar(LApp), PChar(LParam), nil , SW_SHOWNORMAL);
           end;
     end;
@@ -548,305 +598,10 @@ begin
   end;
 end;
 
-procedure TForm1.LB_FavDblClick(Sender: TObject);
+procedure TIPTVForm.Remove1Click(Sender: TObject);
 begin
-   Edit1.Text := LB_Fav.Items[LB_Fav.ItemIndex];
-  PageControl1.ActivePage := TabSheet1;
-  Self.ShowChannels;
-end;
-
-procedure TForm1.Button1Click(Sender: TObject);
-var
-  LSs: TStringStream;
-begin
-  LSs := Nil;
-  try
-    FormStyle := fsNormal;
-    if OpenDialog.Execute then
-    begin
-      Screen.Cursor := crHourGlass;
-      BuildM3UFile(OpenDialog.FileName);
-      PageControl1.ActivePage := TabSheet1;
-      if ShowChannels then CurURL := '';
-      Screen.Cursor := crHourGlass;
-   end;
-  finally
-    Screen.Cursor := crDefault;
-    LSs.Free;
-  end;
-end;
-
-procedure TForm1.Button2Click(Sender: TObject);
-var
-  LURL: string;
-  LUri: TidURI;
-  TSl : TStringList;
-begin
-  try
-    LURL := InputBox('Enter an MP3 Playlist URL :', 'URL : ', CurURL);
-    try
-      if not LURL.Trim.IsEmpty then
-      begin
-        LUri := TIdURI.Create(LURL);
-        LURL := LURI.Protocol + '://' + LUri.Host + '/' + LUri.Document + '?username=';
-        TSl := TStringList.Create(#0, '&', [soStrictDelimiter]);
-        TSl.DelimitedText := LUri.Params;
-        LUrl := LUrl + TSL.Values['username'] + '&password=' + TSL.Values['password'] + '&type=m3u_plus&output=ts';
-        LUri.Free;
-        LUri := TIdURI.Create(LUrl);
-        Log('Downloading M3U (It may take a while...)');
-        CurURL := LUrl;
-        HTTP.Get(CurURL, HTTPStream);
-        end;
-    finally
-      TSl.Free;
-      LUri.Free
-    end
-  except
-    Log('Invalid URL...');
-  end
-end;
-
-procedure TForm1.CopyTitle1Click(Sender: TObject);
-begin
-  if LB_Canals.ItemIndex = - 1 then Exit;
-  Clipboard.AsText := TIPTVChannel(LB_Canals.Items.Objects[LB_Canals.ItemIndex]).Title;
-end;
-
-procedure TForm1.CopyURL1Click(Sender: TObject);
-begin
-  if LB_Canals.ItemIndex = - 1 then Exit;
-    Clipboard.AsText := TIPTVChannel(LB_Canals.Items.Objects[LB_Canals.ItemIndex]).Title;
-end;
-
-procedure TForm1.Edit1DblClick(Sender: TObject);
-begin
-  LB_Fav.AddItem(Edit1.Text, Nil);
-end;
-
-function Tform1.ShowChannels: Boolean;
-var
-  LWords: TStringList;
-  Name: string;
-begin
-  Result := True;
-  Log('Filtering');
-  LWords := Nil;
-  try
-  try
-  Self.PageControl1.ActivePage := Self.TabSheet1;
-  Screen.Cursor := crHourGlass;
-  LB_Canals.Clear;
-  LB_Canals.Sorted := True;
-  if (Trim(Edit1.Text) = '') then
-  begin
-    LB_Canals.Sorted := False;
-    LB_Canals.AddItem('Please define a Query and Press "Enter"...',  Nil);
-    LB_Canals.AddItem('Default : is Inclusive: DEMO IS',  Nil);
-    LB_Canals.AddItem('- : is exclusive: DEMO SWE -AFR',  Nil);
-    LB_Canals.AddItem('"..." : for sentences: "DEMO NL" -AFR',  Nil);
-    LB_Canals.AddItem('">" : Title start with: "DEMO DE" >AFR',  Nil);
-    LB_Canals.AddItem('"+tv" : only TV channels',  Nil);
-    LB_Canals.AddItem('"+mov" : only Movies channels',  Nil);
-    LB_Canals.AddItem('Ex: ''AMAZON PRIME FR:'' French Amazon Prime',Nil);
-    LB_Canals.AddItem('Ex: ''CANAL AFR -sud -DAZN'' African Canal+', Nil);
-    LB_Canals.AddItem('Ex: ''DAZN BE:'' = Belgium DAZN', Nil);
-    LB_Canals.AddItem('Ex: ''"BEIN SPORT" CA:'' = Canadian BEIN SPORTS', Nil);
-    LB_Canals.AddItem('...', Nil);
-    Exit;
-  end;
-  LB_Canals.Items.BeginUpdate;
-  LWords := TStringList.Create;
-  GetQuotedFields(LWords, Edit1.Text, ' ');
-  for var c in TV.Channels do
-  begin
-    If LB_Canals.Items.Count >= 40000 then Break;
-    var Match : Boolean := True;
-    for var w in LWords do
-    begin
-      var s := w.Trim.ToLower;
-      if not s.IsEmpty then
-      begin
-        if not Match then Break;
-        if s[1] = '>' then
-        begin
-          Match := Match and (Pos(Copy(s, 2), c.Title.ToLower) = 1);
-        end else
-        if s[1] = '-' then
-        begin
-          Match := Match and not (Pos( Copy(s, 2), c.Group.ToLower + ' ' + c.Title.ToLower) > 0);
-          if Match then Continue;
-        end;
-
-        if Pos('+mov', s) > 0 then
-        begin
-          Match := Match and c.IsMovie;
-          if Match then Continue;
-        end
-        else
-       if Pos('+tv', s) > 0 then
-          begin
-            Match := Match and not c.IsMovie;
-            if Match then Continue;
-          end
-        else
-          Match := Match and (Pos(s, c.Group.ToLower + ' ' +  c.Title.ToLower) > 0);
-
-        if not Match then Break;
-      end;
-    end;
-      if Match and not c.Title.IsEmpty then
-        if c.IsMovie then Self.LB_Canals.AddItem(c.Title + ' *', c) else LB_Canals.AddItem(c.Title, c);
-  end;
-  finally
-    LB_Canals.Items.EndUpdate;
-    LWords.Free;
-    Screen.Cursor := crDefault;
-  end;
-  Log(Format('Ready %d Channels Filtered',[LB_Canals.Count]));
-  except
-    Result := False;
-    Log('Filtering Failed');
-  end;
-end;
-
-procedure TForm1.Edit1KeyPress(Sender: TObject; var Key: Char);
-begin
-  if ord(Key) = VK_RETURN then
-  begin
-    Key := #0;
-    ShowChannels;
-  end;
-end;
-
-procedure TForm1.FormShow(Sender: TObject);
-begin
-  PageControl1.ActivePage := TabSheet3;
-  Log('Loading Default M3U File');
-  Timer1.Enabled := True;
-  Timer2Timer(Self);
-end;
-
-procedure TForm1.HTTPReceiveDataEx(const Sender: TObject; AContentLength,
-  AReadCount: Int64; AChunk: Pointer; AChunkLength: Cardinal;
-  var AAbort: Boolean);
-begin
-  AAbort := (Self.ComponentState = [csDestroying]);
-  Log(Trunc((AReadCount / AContentLength) * 100).ToString + '%', 1);
-end;
-
-procedure TForm1.HTTPRequestCompleted(const Sender: TObject;
-  const AResponse: IHTTPResponse);
-begin
-  Log('', 1);
-  if AResponse.StatusCode <> 200 then
-  begin
-    Log('Failed');
-    HTTPStream.Clear;
-  end;
-  CreateDir(TPath.GetHomePath + '\' + APPFile );
-  HTTPStream.SaveToFile(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3u');
-  HTTPStream.Clear;
-   Log('Building Playlist');
-  Screen.Cursor := crHourGlass;
-  if BuildM3UFile(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3u') then
-  begin
-    ShowChannels;
-    Log('Ready: ' + TV.Channels.Count.ToString + ' Total Channels');
-  end else
-    Log('Failed');
-  Screen.Cursor := crDefault;
-  PageControl1.Enabled := True;
-  Timer2.Enabled := True;
-end;
-
-procedure TForm1.HTTPRequestException(const Sender: TObject;
-  const AError: Exception);
-begin
-  if csFreeNotification in Form1.ComponentState then Exit;
-  Log('Failed'); Log('', 1);
-  Timer2.Enabled := True;
-  PageControl1.Enabled := True;
-end;
-
-procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
-begin
-  Timer2.Enabled := False;
-  Try HTTP.Get(''); except end;
-end;
-
-procedure TForm1.FormCreate(Sender: TObject);
-var
-  P: TIPTVPrefs;
-  F: string;
-  S: TValue;
-begin
-  P := Nil;
-  Caption := APPTitle;
-  TV := TIPTV.Create;
-  HTTPStream := TStringStream.Create('', TEncoding.UTF8, True);
-  F := TPath.GetHomePath + '\' + APPFile + '\Settings.json';
-  if FileExists(F) then
-  begin
-    P := TJX4Object.LoadFromJSONFile<TIPTVPrefs>(F);
-    for S in P.Fav do
-      LB_Fav.AddItem(S.AsString, Nil);
-    Edit1.Text := P.Edt.AsString;
-    CB_PLayers.ItemIndex := P.Ply.AsInteger;
-    CurURL := XORDecrypt($BE, P.Url.AsString);
-  end else
-    PageControl1.ActivePage := TabSheet3;
-  P.Free;
-
-  var LScreenWidth := GetSystemMetrics(SM_CXSCREEN);
-  var LScreenHeight := GetSystemMetrics(SM_CYSCREEN);
-  var LAppBarData: TAppBarData;
-  LAppBarData.cbSize := SizeOf(TAppBarData);
-  SHAppBarMessage(ABM_GETTASKBARPOS, LAppBarData);
-  Form1.Left := LAppBarData.rc.Right - Form1.Width;
-  Form1.Top := LAppBarData.rc.Top - Form1.Height;
-end;
-
-procedure TForm1.FormDestroy(Sender: TObject);
-var
-  P: TIPTVPrefs;
-  F: string;
-  S: string;
-begin
-  CreateDir(TPath.GetHomePath + '\' + APPFile );
-  F := TPath.GetHomePath + '\' + APPFile + '\Settings.json';
-  P := TIPTVPrefs.Create;
-  P.Ver := 1;
-  for S in LB_Fav.Items do P.Fav.Add(S);
-  P.Edt := Trim(Edit1.Text);
-  P.Ply := CB_PLayers.ItemIndex;
-  P.Url := XOREncrypt($BE, CurURL);
-  P.SaveToJSONFile(F, TEncoding.UTF8);
-  P.Free;
-  HTTPStream.Free;
-  TV.Free;
-end;
-
-procedure TForm1.FormResize(Sender: TObject);
-begin
-  LB_Canals.Columns := Trunc(LB_Canals.Width / 256) ;
-end;
-
-{ TIPTV }
-
-constructor TIPTV.Create;
-begin
- Channels   := TObjectList<TIPTVChannel>.Create(True);
- Categories := TObjectDictionary<string, TObjectList<TIPTVChannel>>.Create([doOwnsValues]);
- Languages  := TObjectDictionary<string, TObjectList<TIPTVChannel>>.Create([doOwnsValues]);
-end;
-
-destructor TIPTV.Destroy;
-begin
-  Languages.Free;
-  Categories.Free;
-  Channels.Free;
-  inherited;
+  if LB_Fav.ItemIndex > -1 then
+    LB_Fav.Items.Delete(LB_Fav.ItemIndex);
 end;
 
 end.

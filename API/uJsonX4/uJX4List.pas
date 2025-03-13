@@ -27,6 +27,7 @@ interface
 uses
     System.Generics.Collections
   , Classes
+  , SysUtils
   , RTTI
   , uJX4Object
   ;
@@ -54,6 +55,8 @@ type
 
     function        Clone(AOptions: TJX4Options = []): TJX4ListOfValues;
     procedure       Merge(AMergedWith: TJX4ListOfValues; AOptions: TJX4Options = []);
+
+    function        SaveToJSONFile(const AFilename: string; AEncoding: TEncoding; AUseBOM: Boolean = False): Int64;
 
     property        EleAdded:    TList<TValue> read FAdded;
     property        EleDeleted:  TList<TValue> read FDeleted;
@@ -84,6 +87,8 @@ type
 
     function        Clone<V:class, constructor>(AOptions: TJX4Options = []): V; overload;
 
+    function        SaveToJSONFile(const AFilename: string; AEncoding: TEncoding; AUseBOM: Boolean = False): Int64;
+
     property       EleAdded:    TStringList read FAdded;
     property       EleModified: TStringList read FModified;
     property       EleDeleted:  TStringList read FDeleted;
@@ -96,7 +101,6 @@ uses
     Generics.Defaults
   , uJX4Rtti
   , uJX4Value
-  , SysUtils
   , JSON
   , System.TypInfo
   ;
@@ -253,6 +257,11 @@ begin
   Result.AddRange(AValues);
 end;
 
+function TJX4ListOfValues.SaveToJSONFile(const AFilename: string; AEncoding: TEncoding; AUseBOM: Boolean): Int64;
+begin
+  Result := TJX4Object.SaveToFile(AFilename, TJX4Object.ToJSON(Self), AEncoding, AUseBOM);
+end;
+
 procedure TJX4ListOfValues.Merge(AMergedWith: TJX4ListOfValues; AOptions: TJX4Options);
 begin
   try
@@ -273,14 +282,13 @@ constructor TJX4List<T>.Create;
   LField:     TRTTIField;
   LNewObj:    TObject;
 begin
-  inherited Create;
+  inherited Create(True);
   FAdded :=  TStringList.Create;
   FAdded.Duplicates := dupIgnore;
   FModified := TStringList.Create;
   FModified.Duplicates := dupIgnore;
   FDeleted := TStringList.Create;
   FDeleted.Duplicates := dupIgnore;
-  Self.OwnsObjects := True;
   LFields := TxRTTI.GetFields(Self);
   for LField in LFields do
   begin
@@ -540,6 +548,11 @@ begin
       Self.Delete(LIdx);
     end;
   end;
+end;
+
+function TJX4List<T>.SaveToJSONFile(const AFilename: string; AEncoding: TEncoding; AUseBOM: Boolean): Int64;
+begin
+  Result := TJX4Object.SaveToFile(AFilename, TJX4Object.ToJSON(Self), AEncoding, AUseBOM);
 end;
 
 
