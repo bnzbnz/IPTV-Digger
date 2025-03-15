@@ -29,22 +29,27 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ComCtrls,System.Win.TaskbarCore, Vcl.Taskbar,
   Vcl.Menus, Vcl.Samples.Spin
-  , uThreadedHTTPGet
+  , uThreadedHTTPGet, uDigThread
   , RTTI, uJX4Object, uJX4List
   ;
 
 
 const
-  APPTitle = 'IPTV Digger v1.0 Beta 3';
-  APPFile  = 'IPTV-Digger';
+  APPTitle = 'IPTV Digger v1.0 Beta 4';
+  APPFile  = 'IPTVDigger';
 
 type
 
   TSettings = class(TJX4Object)
+    [JX4Defaault('')]
     M3U: TValue;
+    [JX4Defaault('')]
     Query: TValue;
+    [JX4Defaault(0)]
     Player: TValue;
+    [JX4Defaault(400)]
     MaxValues: TValue;
+    [JX4Defaault(60)]
     Refresh: TValue;
     [JX4Defaault(True)]
     OnTop: TValue;
@@ -75,10 +80,10 @@ type
     Label4: TLabel;
     SERefresh: TSpinEdit;
     CBOnTop: TCheckBox;
-    Taskbar: TTaskbar;
+    PPStatusBar: TPopupMenu;
+    RefreshM3UData1: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure EQueryKeyPress(Sender: TObject; var Key: Char);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure LB_FavDblClick(Sender: TObject);
     procedure LB_CanalsDblClick(Sender: TObject);
@@ -87,15 +92,19 @@ type
     procedure Open1Click(Sender: TObject);
     procedure Remove1Click(Sender: TObject);
     procedure CBOnTopClick(Sender: TObject);
+    procedure EQueryKeyPress(Sender: TObject; var Key: Char);
+    procedure RefreshM3UData1Click(Sender: TObject);
   private
     { Private declarations }
     procedure Log(AMsg: string; APanel: integer = 0);
     procedure Play(URL: string; Player: Integer);
+    procedure OnFoundChannel(ADigger: TDigThread; ATitle: string; AIndex: integer);
   public
     CList: TStringList;
     HTTPUrl: string;
     HTTPStream: TStringStream;
     HTTPRaw: THTTPGetThread;
+    Digger: TDigThread;
 
     procedure HTTPProgress(ASender: THTTPGetThread; Progress: Integer);
     procedure HTTPCompleted(ASender: THTTPGetThread; IsTerminated: Boolean; IsAsync: Boolean);
@@ -139,9 +148,9 @@ end;
 
 function XORDecrypt(AKey: Byte; AStr: string): string;
 var
-  LVal: Byte;
-  LVal2: Byte;
   Stream: TStringStream;
+  LIdx: Integer;
+  LVal, LVal2: Byte;
 begin
   Result := '';
   Stream := TStringStream.Create(AStr);
@@ -188,16 +197,7 @@ begin
   HTTPRaw.Free;
   ProgressBar.Visible := True;
   ProgressBar.Style := pbstMarquee;
-  HTTPRaw := THTTPGetThread.Create(AUrl, HTTPStream, Nil, HTTPCompleted, HTTPProgress);
-end;
-
-procedure TIPTVForm.EQueryKeyPress(Sender: TObject; var Key: Char);
-begin
-  if ord(Key) = VK_RETURN then
-  begin
-    Key := #0;
-    ShowChannels;
-  end
+  HTTPRaw := THTTPGetThread.Create(AUrl, HTTPStream, Nil, 'IPTVSmartersPro', HTTPCompleted, HTTPProgress);
 end;
 
 procedure TIPTVForm.EM3U2KeyPressed(Sender: TObject; var Key: Char);
@@ -205,6 +205,7 @@ var
   LURL: string;
   LUri: TidURI;
   LSl : TStringList;
+  LPort: string;
 begin
   LSl := Nil;
   LUri := Nil;
@@ -214,16 +215,25 @@ begin
       Key := #0;
       if Trim(EM3U.Text).IsEmpty then Exit;
       LUri := TIdURI.Create(Trim(EM3U.Text));
-      LURL := LURI.Protocol + '://' + LUri.Host + '/' + LUri.Document + '?username=';
+      if LUri.Port.IsEmpty then
+        LURL := LURI.Protocol + '://' + LUri.Host + '/' + LUri.Document + '?username='
+      else
+        LURL := LURI.Protocol + '://' + LUri.Host + ':' + LUri.Port + '/' + LUri.Document + '?username=';
       LSl := TStringList.Create(#0, '&', [soStrictDelimiter]);
       LSl.DelimitedText := LUri.Params;
       HTTPUrl := LUrl + LSl.Values['username'] + '&password=' + LSl.Values['password'] + '&type=m3u_plus&output=ts';
-      DownloadM3U( LUrl + LSl.Values['username'] + '&password=' + LSl.Values['password'] + '&type=m3u_plus&output=ts');
+      DownloadM3U(HTTPUrl);
     end;
   finally
     LSl.Free;
     LUri.Free
   end;
+end;
+
+procedure TIPTVForm.EQueryKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Ord(Key) = VK_RETURN then Key := #0;
+  ShowChannels;
 end;
 
 procedure TIPTVForm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -248,11 +258,12 @@ var
   LSettings: TSettings;
   LTVal: TValue;
 begin
-  Log('Start Up');
+  Log('Starting Up...');
   Caption := APPTitle;
   CList := TStringList.Create;
   HTTPStream := TStringStream.Create;
   HTTPRaw    := Nil;
+  Digger := TDigThread.Create(OnFoundChannel);
   CreateDir(TPath.GetHomePath + '\' + APPFile );
 
   if FileExists(TPath.GetHomePath + '\' + APPFile + '\Settings.json') then
@@ -296,6 +307,7 @@ end;
 
 procedure TIPTVForm.FormDestroy(Sender: TObject);
 begin
+  Digger.Free;
   HTTPRaw.Free;
   HTTPStream.Free;
   CList.Free;
@@ -439,7 +451,7 @@ begin
       LTempList.StrictDelimiter := False;
       try
       try
-        LTempList.Text := TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 );
+        LTempList.Text := UTF8Decode(TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 ));
         TStringStream(THTTPGetThread(ASender).Stream).Clear;
 
         LList :=  TStringList.Create;;
@@ -482,25 +494,10 @@ begin
   end;
 end;
 
-function Match(ALine: string; AWords: TStringList): Boolean;
-var
-  LWord: string;
-  LMatch: Boolean;
+procedure TIPTVForm.OnFoundChannel(ADigger: TDigThread; ATitle: string; AIndex: integer);
 begin
-  Result := False;
-  ALine := ALine.ToLower;
-  Result := True;
-  for LWord in AWords do
-  begin
-    if  LWord.IsEmpty then Continue;
-
-    if LWord[1] = '-' then
-      Result := Result and not (Pos( Copy(LWord, 2),  ALine) > 0)
-    else
-      Result := Result and ( Pos(LWord, ALine) > 0 );
-
-    if not Result then Break;
-  end;
+  LB_Canals.AddItem(ATitle, Tobject(AIndex));
+  StatusBar.Panels[0].Text := LB_Canals.Count.ToString + ' Channels Found';
 end;
 
 procedure TIPTVForm.ShowChannels;
@@ -526,22 +523,7 @@ begin
     LB_Canals.AddItem('...', Nil);
     Exit;
   end;
-  LWords := TStringList.Create;
-  GetQuotedFields(LWords, Trim(EQuery.Text).ToLower, ' ');
-  LIdx := 0;
-  while( LIdx < CList.Count - 3 ) do
-  begin
-    if LB_Canals.Count > SPMaxVal.Value then
-    begin
-      LB_Canals.Sorted := False;
-      LB_Canals.AddItem('...and more...', Tobject(-1));
-      Break;
-    end;
-    if Match(CList[LIdx], LWords) then
-      LB_Canals.AddItem(CList[LIdx], TOBject(LIdx));
-    Inc(LIdx, 3);
-  end;
-  LWords.Free;
+  Digger.Dig(CList, Trim(EQuery.Text).ToLower, SPMaxVal.Value);
 end;
 
 procedure TIPTVForm.Play(URL: string; Player: Integer);
@@ -596,6 +578,11 @@ begin
   finally
     Reg.Free;
   end;
+end;
+
+procedure TIPTVForm.RefreshM3UData1Click(Sender: TObject);
+begin
+  DownloadM3U(HTTPUrl);
 end;
 
 procedure TIPTVForm.Remove1Click(Sender: TObject);

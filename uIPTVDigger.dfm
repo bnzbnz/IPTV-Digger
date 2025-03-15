@@ -21,11 +21,9 @@ object IPTVForm: TIPTVForm
     Top = 0
     Width = 292
     Height = 346
-    ActivePage = TabSheet2
+    ActivePage = TabSheet1
     Align = alClient
     TabOrder = 0
-    ExplicitWidth = 325
-    ExplicitHeight = 239
     object TabSheet2: TTabSheet
       Caption = 'Query'
       ImageIndex = 1
@@ -38,7 +36,6 @@ object IPTVForm: TIPTVForm
         PopupMenu = PPQuery
         TabOrder = 0
         OnKeyPress = EQueryKeyPress
-        ExplicitWidth = 317
       end
       object LB_Canals: TListBox
         Left = 0
@@ -50,8 +47,6 @@ object IPTVForm: TIPTVForm
         PopupMenu = PPQuery
         TabOrder = 1
         OnDblClick = LB_CanalsDblClick
-        ExplicitWidth = 317
-        ExplicitHeight = 186
       end
     end
     object TabSheet3: TTabSheet
@@ -68,8 +63,6 @@ object IPTVForm: TIPTVForm
         Sorted = True
         TabOrder = 0
         OnDblClick = LB_FavDblClick
-        ExplicitWidth = 317
-        ExplicitHeight = 190
       end
     end
     object TabSheet1: TTabSheet
@@ -175,9 +168,6 @@ object IPTVForm: TIPTVForm
     MarqueeInterval = 1
     TabOrder = 1
     Visible = False
-    ExplicitLeft = 307
-    ExplicitTop = 0
-    ExplicitWidth = 238
   end
   object StatusBar: TStatusBar
     Left = 0
@@ -189,21 +179,19 @@ object IPTVForm: TIPTVForm
         Alignment = taCenter
         Width = 50
       end>
-    ExplicitLeft = 160
-    ExplicitTop = -16
-    ExplicitWidth = 0
+    PopupMenu = PPStatusBar
   end
   object PPQuery: TPopupMenu
-    Left = 36
-    Top = 26
+    Left = 60
+    Top = 58
     object AddQuerytoFavorites1: TMenuItem
       Caption = 'Add Query to Favorites'
       OnClick = AddQuerytoFavorites1Click
     end
   end
   object PPFav: TPopupMenu
-    Left = 156
-    Top = 26
+    Left = 180
+    Top = 58
     object Open1: TMenuItem
       Caption = 'Open'
       OnClick = Open1Click
@@ -213,12 +201,12 @@ object IPTVForm: TIPTVForm
       OnClick = Remove1Click
     end
   end
-  object Taskbar: TTaskbar
-    TaskBarButtons = <>
-    ProgressState = Normal
-    ProgressMaxValue = 100
-    TabProperties = []
-    Left = 132
-    Top = 226
+  object PPStatusBar: TPopupMenu
+    Left = 116
+    Top = 210
+    object RefreshM3UData1: TMenuItem
+      Caption = 'Refresh M3U Data'
+      OnClick = RefreshM3UData1Click
+    end
   end
 end

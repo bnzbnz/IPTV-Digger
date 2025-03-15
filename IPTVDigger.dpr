@@ -11,7 +11,8 @@ uses
   uJX4Object in 'API\uJsonX4\uJX4Object.pas',
   uJX4Rtti in 'API\uJsonX4\uJX4Rtti.pas',
   uJX4Value in 'API\uJsonX4\uJX4Value.pas',
-  uJX4YAML in 'API\uJsonX4\uJX4YAML.pas';
+  uJX4YAML in 'API\uJsonX4\uJX4YAML.pas',
+  uDigThread in 'uDigThread.pas';
 
 {$R *.res}
 

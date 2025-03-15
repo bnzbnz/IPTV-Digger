@@ -145,6 +145,7 @@
         <DCCReference Include="API\uJsonX4\uJX4Rtti.pas"/>
         <DCCReference Include="API\uJsonX4\uJX4Value.pas"/>
         <DCCReference Include="API\uJsonX4\uJX4YAML.pas"/>
+        <DCCReference Include="uDigThread.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

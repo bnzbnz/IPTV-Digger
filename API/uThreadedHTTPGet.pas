@@ -50,24 +50,39 @@ type
     Result: IHTTPResponse;
     Stream: TStream;
     UserObj: TObject;
+    UserAgent: string;
     OnCompleted: TProc<THTTPGetThread, Boolean, Boolean>;
     OnProgress: TProc<THTTPGetThread, Integer>;
-    constructor Create(AURL: string; AStream: TStream; AUserObj: TObject; AOnCompleted: TProc<THTTPGetThread, Boolean, Boolean>; AOnProgress: TProc<THTTPGetThread, Integer>); overload;
+    constructor Create(
+      AURL: string;
+      AStream: TStream;
+      AUserObj: TObject;
+      AUserAgent: string;
+      AOnCompleted: TProc<THTTPGetThread, Boolean, Boolean>;
+      AOnProgress: TProc<THTTPGetThread, Integer>
+    ); overload;
     destructor Destroy; override;
   end;
 
 implementation
 
-constructor THTTPGetThread.Create(AURL: string; AStream: TStream;
-  AUserObj: TObject; AOnCompleted: TProc<THTTPGetThread, Boolean, Boolean>;
-  AOnProgress: TProc<THTTPGetThread, Integer>);
+constructor THTTPGetThread.Create(
+    AURL: string;
+    AStream: TStream;
+    AUserObj: TObject;
+    AUserAgent: string;
+    AOnCompleted: TProc<THTTPGetThread, Boolean, Boolean>;
+    AOnProgress: TProc<THTTPGetThread, Integer>
+  );
 begin
   inherited Create(False);
   FreeOnTerminate := False;
+  Priority := tpLower;
   TempProgress := -1;
   URL := AURL;
   Stream := AStream;
   UserObj := AUserObj;
+  UserAgent := AUserAgent;
   OnCompleted := AOnCompleted;
   OnProgress := AOnProgress;
 end;
@@ -97,6 +112,7 @@ procedure THTTPGetThread.Execute;
 begin
   try
     HTTP := THTTPClient.Create;
+    HTTP.UserAgent := UserAgent;
     HTTP.HandleRedirects := True;
     HTTP.MaxRedirects := 5;
     HTTP.ConnectionTimeout := 2*60*1000;
