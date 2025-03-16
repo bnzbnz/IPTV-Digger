@@ -21,7 +21,7 @@ object IPTVForm: TIPTVForm
     Top = 0
     Width = 292
     Height = 346
-    ActivePage = TabSheet1
+    ActivePage = TabSheet2
     Align = alClient
     TabOrder = 0
     object TabSheet2: TTabSheet
@@ -35,6 +35,7 @@ object IPTVForm: TIPTVForm
         Align = alTop
         PopupMenu = PPQuery
         TabOrder = 0
+        OnChange = EQueryChange
         OnKeyPress = EQueryKeyPress
       end
       object LB_Canals: TListBox

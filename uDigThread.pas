@@ -35,18 +35,25 @@ type
   TDigThread = class(TThread)
   private
     { Private declarations }
-    PAbort: PBoolean;
-    List: TStringList;
-    Start: integer;
-    Count: integer;
-    Query: string;
-    RunEvent: TEvent;
+    FList: TStringList;
+    FStart: integer;
+    FCount: integer;
+    FQuery: string;
     FMax: integer;
   protected
     procedure Execute; override;
   public
+    OnStart: TProc<TDigThread>;
     OnFound: TProc<TDigThread, string, integer>;
-    constructor Create(AOnFound: TProc<TDigThread, string, integer>); overload;
+    OnDone : TProc<TDigThread>;
+    constructor Create(
+      AList: TStringList;
+      AQuery: string;
+      AMax: Integer;
+      AOnStart: TProc<TDigThread>;
+      AOnFound: TProc<TDigThread, string, integer>;
+      AOnDone:  TProc<TDigThread>
+      ); overload;
     destructor  Destroy; override;
     procedure   Dig(AList: TStringList; AQuery: string; AMax: integer);
   end;
@@ -84,91 +91,100 @@ begin
   if Length(Field) > 0 then AList.Add(Field);
 end;
 
-function Match(ALine: string; AWords: TStringList): Boolean;
+function Match(AList: TStringList; AIdx: Integer; AWords: TStringList): Boolean;
 var
   LWord: string;
   LMatch: Boolean;
+  LLine: string;
 begin
   Result := False;
-  ALine := ALine.ToLower;
+  LLine := AList[AIdx].ToLower;
   Result := True;
   for LWord in AWords do
   begin
     if  LWord.IsEmpty then Continue;
 
+    if LWord[1] = '+' then
+    begin
+      if Copy(LWord, 2, 3) = 'tv' then Result := Result and (AList[AIdx + 2] = 'TV')
+      else if Copy(LWord, 2, 3) = 'mov' then Result := Result and (AList[AIdx + 2] = 'MOVIE')
+      else if Copy(LWord, 2, 3) = 'ser' then Result := Result and (AList[AIdx + 2] = 'SERIE')
+      else Result := False;
+    end else
     if LWord[1] = '-' then
-      Result := Result and not (Pos( Copy(LWord, 2),  ALine) > 0)
+      Result := Result and not (Pos( Copy(LWord, 2),  LLine) > 0)
     else
-      Result := Result and ( Pos(LWord, ALine) > 0 );
+      Result := Result and ( Pos(LWord, LLine) > 0 );
     if not Result then Break;
   end;
 end;
 
-constructor TDigThread.Create(AOnFound: TProc<TDigThread, string, integer>);
+constructor TDigThread.Create(
+              AList: TStringList;
+              AQuery: string;
+              AMax: Integer;
+              AOnStart: TProc<TDigThread>;
+              AOnFound: TProc<TDigThread, string, integer>;
+              AOnDone:  TProc<TDigThread>
+            );
 begin
   inherited Create(False);
-  FreeOnTerminate := True;
+  FQuery := AQuery;
+  FMax := AMax;
+  FList := AList;
+  OnStart := AOnStart;
   OnFound := AOnFound;
-  RunEvent := TEvent.Create(nil,True, False, '');
+  OnDone  := AOnDone;
 end;
 
 destructor TDigThread.Destroy;
 begin
-  RunEvent.ResetEvent;
   Terminate;
   WaitFor;
-  RunEvent.Free;
   inherited;
+end;
+
+procedure Abort;
+begin
 end;
 
 procedure TDigThread.Dig(AList: TStringList; AQuery: string; AMax: integer);
 begin
-  RunEvent.ResetEvent;
-  while (RunEvent.WaitFor(10) = wrSignaled) do;
-  Query := AQuery;
-  FMax := AMax;
-  List := AList;
-  RunEvent.SetEvent;
+
 end;
 
 procedure TDigThread.Execute;
 var
-  LIneIdx: integer;
+  LineIdx: Integer;
   LWords: TStringList;
   LMax: Integer;
 begin
   try
-  LWords := TStringList.Create;
-  while(not Terminated) do
-  begin
+    LWords := TStringList.Create;
 
-    while( RunEvent.WaitFor(500) <> wrSignaled) do if Terminated then Break;
-    if not Terminated then
-    begin
-      LIneIdx := 0;
-      LMax := FMAx;
+      Synchronize( procedure begin OnStart(Self); end );
+      LIneIdx := 2;
+      LMax := FMax;
       LWords.Clear;
-      GetQuotedFields(LWords, Query.ToLower, ' ');
-      while (LIneIdx < List.Count) do
-       begin
-         if Terminated or (RunEvent.WaitFor(0) = wrTimeout) or (LMax=0) then Break;
-         if Match(List[LIneIdx], LWords) and Assigned(OnFound) then
-         begin
+      GetQuotedFields(LWords, FQuery.ToLower, ' ');
+      while (LineIdx < FList.Count) do
+        begin
+          if Terminated or (LMax = 0) then Break;
+          if Match(FList, LIneIdx, LWords) and Assigned(OnFound) then
+          begin
           Dec(LMax);
           Synchronize(
              procedure
              begin
-               OnFound(Self, List[LIneIdx], LineIdx);
+               OnFound(Self, FList[LIneIdx], LineIdx);
              end
            );
           end;
-        Inc(LIneIdx, 3);
+          Inc(LIneIdx, 6);
       end;
-    end;
-    RunEvent.ResetEvent;
 
-  end;
-  LWords.Free;
+    LWords.Free;
+  Terminate;
   except
     on Ex: Exception do
       var a := 1;

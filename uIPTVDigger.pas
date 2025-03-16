@@ -35,9 +35,9 @@ uses
 
 
 const
-  APPTitle = 'IPTV Digger v1.0 Beta 4';
+  APPTitle = 'IPTV Digger v1.0 Beta 5';
   APPFile  = 'IPTVDigger';
-
+  DBVersion = 5;
 type
 
   TSettings = class(TJX4Object)
@@ -94,11 +94,14 @@ type
     procedure CBOnTopClick(Sender: TObject);
     procedure EQueryKeyPress(Sender: TObject; var Key: Char);
     procedure RefreshM3UData1Click(Sender: TObject);
+    procedure EQueryChange(Sender: TObject);
   private
     { Private declarations }
     procedure Log(AMsg: string; APanel: integer = 0);
     procedure Play(URL: string; Player: Integer);
-    procedure OnFoundChannel(ADigger: TDigThread; ATitle: string; AIndex: integer);
+    procedure OnStartDigging(ADigger: TDigThread);
+    procedure OnDoneDigging(ADigger: TDigThread);
+    procedure OnDiggerFound(ADigger: TDigThread; ATitle: string; AIndex: integer);
   public
     CList: TStringList;
     HTTPUrl: string;
@@ -222,6 +225,7 @@ begin
       LSl := TStringList.Create(#0, '&', [soStrictDelimiter]);
       LSl.DelimitedText := LUri.Params;
       HTTPUrl := LUrl + LSl.Values['username'] + '&password=' + LSl.Values['password'] + '&type=m3u_plus&output=ts';
+      Log('Connecting to M3U Server...');
       DownloadM3U(HTTPUrl);
     end;
   finally
@@ -230,10 +234,19 @@ begin
   end;
 end;
 
+procedure TIPTVForm.EQueryChange(Sender: TObject);
+begin
+  ShowChannels;
+end;
+
 procedure TIPTVForm.EQueryKeyPress(Sender: TObject; var Key: Char);
 begin
-  if Ord(Key) = VK_RETURN then Key := #0;
-  ShowChannels;
+
+  if Ord(Key) = VK_RETURN then
+  begin
+    Key := #0;
+    ShowChannels;
+  end;
 end;
 
 procedure TIPTVForm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -257,13 +270,14 @@ procedure TIPTVForm.FormCreate(Sender: TObject);
 var
   LSettings: TSettings;
   LTVal: TValue;
+  LVersion: Integer;
 begin
   Log('Starting Up...');
   Caption := APPTitle;
   CList := TStringList.Create;
   HTTPStream := TStringStream.Create;
   HTTPRaw    := Nil;
-  Digger := TDigThread.Create(OnFoundChannel);
+  Digger := Nil;
   CreateDir(TPath.GetHomePath + '\' + APPFile );
 
   if FileExists(TPath.GetHomePath + '\' + APPFile + '\Settings.json') then
@@ -286,7 +300,13 @@ begin
     end;
 
     if FileExists(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3x') then
+    begin
       CList.LoadFromFile(TPath.GetHomePath + '\' + APPFile + '\Playlist.m3x', TEncoding.UTF8);
+      if not TryStrToInt(CList[0], LVersion) then
+        CList.Clear
+      else if LVersion < DBVersion then
+        CList.Clear;
+    end;
 
     PC.ActivePage := TabSheet2;
     Log('Connecting to M3U Server, it may take a while');
@@ -307,7 +327,7 @@ end;
 
 procedure TIPTVForm.FormDestroy(Sender: TObject);
 begin
-  Digger.Free;
+  FreeAndNil(Digger);
   HTTPRaw.Free;
   HTTPStream.Free;
   CList.Free;
@@ -330,7 +350,7 @@ begin
   if LIdx = -1 then Exit;
   LIdx := Integer(LB_Canals.ItEms.Objects[LIdx]);
   if LIdx = -1 then Exit;
-  LURL := XORDecrypt($AF, CList[LIdx + 2]);
+  LURL := XORDecrypt($AF, CList[LIdx + 4]);
   Play(LURL, CBPlayers.ItemIndex);
 end;
 
@@ -376,25 +396,26 @@ begin
   if Length(Field) > 0 then AList.Add(Field);
 end;
 
-function Parse(ALine: string; var  ATitle: string; var ALang: string): boolean;
+function Parse(AList: TStringList; AIdx: integer; var AId: integer; var  ATitle: string; var ALang: string; var AType: string): boolean;
 var
   LParts : TArray<string>;
   LTitleParts : TArray<string>;
   LSubParts: TStringList;
   LLangParts: TArray<string>;
-  LName: string;
+  LName, LUrl, LStr: string;
 begin
   Result := False;
   LSubParts := Nil;
   try
   try
-   LParts    :=  ALine.Split([','], '"', '"',  99);
+   LStr      := UTF8Decode(AList[AIdx]);
+   LParts    :=  LStr.Split([','], '"', '"',  99);
    LSubParts := TStringList.Create;
    GetQuotedFields(LSubParts, LParts[0], ' ');
    LName := LSubParts.Values['tvg-name'].DeQuotedString('"').Trim;
    if LName.Trim.StartsWith('#') then Exit;
 
-   If Length(LParts) = 1 then  ATitle := LName else
+    if Length(LParts) = 1 then  ATitle := LName else
     begin
       ATitle := LParts[1];
       for var i := 2 to Length(LParts) - 1 do ATitle :=  ATitle + ' ' + LParts[i];
@@ -406,6 +427,7 @@ begin
       ATitle := LTitleParts[1];
       for var i := 2 to Length(LTitleParts) - 1 do ATitle := ATitle + ', ' + LTitleParts[i];
     end;
+    ATitle := ATitle.Trim;
 
     LLangParts :=  LName.Split(['[', ']', ' - ', '|', ':', '_'], '"', '"', 99);
     if (Length(LLangParts) > 1) then // and (Length(LangArray[0].Trim) <= 12) then
@@ -420,11 +442,17 @@ begin
         else
           ALang := '???';
       end;
-
-      Result := True;
     end;
-    ATitle := ATitle.Trim;
     ALang := ALang.Trim;
+
+    LUrl := AList[AIdx + 1].ToLower;
+    if not TryStrToInt(TPath.GetFileNameWithoutExtension(AList[AIdx+1]), AId) then AId := 0;
+    if LUrl.Contains('/movie/') then AType := 'MOVIE'
+    else if LUrl.Contains('/series/') then AType := 'SERIE'
+    else AType := 'TV';
+
+    Result := True;
+
   finally
     LSubParts.Free;
   end;
@@ -438,7 +466,8 @@ var
   LIdx: integer;
   LList: TStringList;
   LTempList: TStringList;
-  LTitle, LLang: string;
+  LTitle, LLang, LType: string;
+  LId: Integer;
 begin
   if IsAsync then
   begin
@@ -451,19 +480,23 @@ begin
       LTempList.StrictDelimiter := False;
       try
       try
-        LTempList.Text := UTF8Decode(TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 ));
+        LTempList.Text := (TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 ));
         TStringStream(THTTPGetThread(ASender).Stream).Clear;
 
         LList :=  TStringList.Create;;
+        LList.Add(DBVersion.ToString);
         THTTPGetThread(ASender).UserObj := LList;
         LIdx := 0;
         while LIdx < LTempList.count - 2  do
         begin
           if LTempList[LIdx].ToUpper.StartsWith('#EXTINF:-1') then
           begin
-            if Parse(LTempList[LIdx], LTitle, LLang) then
+            if Parse(LTempList, LIdx, LId, LTitle, LLang, LType) then
             begin
+              LList.Add('');
               LList.Add(LLang + ': ' + LTitle);
+              LList.Add(LId.ToString);
+              LList.Add(LType);
               LList.Add(LTempList[LIdx]);
               LList.Add(XOREncrypt($AF, LTempList[LIdx + 1]));
             end;
@@ -485,19 +518,30 @@ begin
     begin
        HTTPUrl := ASender.URL;
        LList := TStringList(THTTPGetThread(ASender).UserObj);
+       FreeandNil(Digger);
        CList.Free; CList := LList;
        ShowChannels;
-       Log('');
     end else
       FreeAndNil(THTTPGetThread(ASender).UserObj);
     ProgressBar.Visible := False;
   end;
 end;
 
-procedure TIPTVForm.OnFoundChannel(ADigger: TDigThread; ATitle: string; AIndex: integer);
+procedure TIPTVForm.OnDoneDigging(ADigger: TDigThread);
+begin
+  //LB_Canals.Items.EndUpdate;
+end;
+
+procedure TIPTVForm.OnDiggerFound(ADigger: TDigThread; ATitle: string; AIndex: integer);
 begin
   LB_Canals.AddItem(ATitle, Tobject(AIndex));
-  StatusBar.Panels[0].Text := LB_Canals.Count.ToString + ' Channels Found';
+  Log( LB_Canals.Count.ToString + ' Channels Found' );
+end;
+
+procedure TIPTVForm.OnStartDigging(ADigger: TDigThread);
+begin
+  LB_Canals.Clear;
+  //LB_Canals.Items.BeginUpdate;
 end;
 
 procedure TIPTVForm.ShowChannels;
@@ -505,25 +549,29 @@ var
   LIdx: integer;
   LWords: TStringList;
 begin
-  LB_Canals.Clear;
-  LB_Canals.Sorted := True;
   if CList.Count = 0 then Exit;
+  LB_Canals.Sorted := True;
   if (Trim(EQuery.Text).IsEmpty) then
   begin
+    LB_Canals.Clear;
     LB_Canals.Sorted := False;
     LB_Canals.AddItem('Please define a Query and Press "Enter"...',  Nil);
     LB_Canals.AddItem('Default : is Inclusive: DEMO EN:',  Nil);
-    LB_Canals.AddItem('- : is exclusive: DEMO SWE -AFR',  Nil);
+    LB_Canals.AddItem('- : is exclusive: DEMO SWE: -AFR',  Nil);
     LB_Canals.AddItem('"" : for sentences: "DEMO NL" -AFR',  Nil);
+    LB_Canals.AddItem('+TV +MOV +SER : to only show thoses types',  Nil);
     LB_Canals.AddItem('Ex: ''AMAZON PRIME FR:'' French Amazon Prime',Nil);
     LB_Canals.AddItem('Ex: ''CANAL AFR'' African Canal+', Nil);
     LB_Canals.AddItem('Ex: ''DAZN BE:'' = Belgium DAZN', Nil);
     LB_Canals.AddItem('Ex: ''"BEIN SPORT" UK:'' =  UK BEIN SPORTS', Nil);
-    LB_Canals.AddItem('Ex: ''"SKY SPORT" UK: F1'' =  UK SKY SPORTS, F1 channels', Nil);
+    LB_Canals.AddItem('Ex: ''"SKY SPORT" UK: F1 +TV '' =  UK SKY SPORTS, F1 channels, TV Only', Nil);
     LB_Canals.AddItem('...', Nil);
-    Exit;
+  end else
+  begin
+    FreeAndNil(Digger);
+    Log('No Channel Found');
+    Digger := TDigThread.Create(CList, Trim(EQuery.Text).ToLower, SPMaxVal.Value, OnStartDigging, OnDiggerFound, OnDoneDigging);
   end;
-  Digger.Dig(CList, Trim(EQuery.Text).ToLower, SPMaxVal.Value);
 end;
 
 procedure TIPTVForm.Play(URL: string; Player: Integer);

@@ -76,7 +76,6 @@ constructor THTTPGetThread.Create(
   );
 begin
   inherited Create(False);
-  FreeOnTerminate := False;
   Priority := tpLower;
   TempProgress := -1;
   URL := AURL;
@@ -131,7 +130,6 @@ begin
         end;
         Sleep(100);
       end;
-
       Result := HTTP.EndAsyncHTTP(AsyncResult);
       if Assigned(OnCompleted) then
       begin
@@ -139,8 +137,11 @@ begin
         Synchronize(procedure begin OnCompleted(Self, Terminated or AsyncResult.IsCancelled, False); end);
       end;
     except
-      OnCompleted(Self, True, True);
-      Synchronize(procedure begin OnCompleted(Self, True, False); end);
+      if Assigned(OnCompleted) then
+      begin
+        OnCompleted(Self, True, True);
+        Synchronize(procedure begin OnCompleted(Self, True, False); end);
+      end;
     end;
   finally
     FreeAndNil(HTTP);
