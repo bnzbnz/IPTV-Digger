@@ -29,8 +29,9 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ComCtrls,System.Win.TaskbarCore, Vcl.Taskbar,
   Vcl.Menus, Vcl.Samples.Spin
-  , uThreadedHTTPGet, uDigThread
+  , uThreadedHTTPGet, uDigThread, uIPTVCommon
   , RTTI, uJX4Object, uJX4List
+  , System.Generics.Collections
   ;
 
 
@@ -54,6 +55,12 @@ type
     [JX4Defaault(True)]
     OnTop: TValue;
     Favorites: TJX4ListOfValues;
+    History: TJX4ListOfValues;
+  end;
+
+  TChannelsData = class
+    List: TStringList;
+    Idx:  TDictionary<Integer, Integer>;
   end;
 
   TIPTVForm = class(TForm)
@@ -82,6 +89,12 @@ type
     CBOnTop: TCheckBox;
     PPStatusBar: TPopupMenu;
     RefreshM3UData1: TMenuItem;
+    TabSheet4: TTabSheet;
+    LB_History: TListBox;
+    PPHisto: TPopupMenu;
+    Open2: TMenuItem;
+    Remove2: TMenuItem;
+    RemoveAll1: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
@@ -95,6 +108,9 @@ type
     procedure EQueryKeyPress(Sender: TObject; var Key: Char);
     procedure RefreshM3UData1Click(Sender: TObject);
     procedure EQueryChange(Sender: TObject);
+    procedure LB_HistoryDblClick(Sender: TObject);
+    procedure Remove2Click(Sender: TObject);
+    procedure RemoveAll1Click(Sender: TObject);
   private
     { Private declarations }
     procedure Log(AMsg: string; APanel: integer = 0);
@@ -102,12 +118,15 @@ type
     procedure OnStartDigging(ADigger: TDigThread);
     procedure OnDoneDigging(ADigger: TDigThread);
     procedure OnDiggerFound(ADigger: TDigThread; ATitle: string; AIndex: integer);
+    procedure OnDiggerHistoFound(ADigger: TDigThread; ATitle: string; AIndex: integer);
   public
     CList: TStringList;
+    CIdx: TDictionary<Integer, Integer>;
     HTTPUrl: string;
     HTTPStream: TStringStream;
     HTTPRaw: THTTPGetThread;
     Digger: TDigThread;
+    DiggerHisto: TDigThread;
 
     procedure HTTPProgress(ASender: THTTPGetThread; Progress: Integer);
     procedure HTTPCompleted(ASender: THTTPGetThread; IsTerminated: Boolean; IsAsync: Boolean);
@@ -262,6 +281,7 @@ begin
   LSettings.Refresh := SERefresh.Value;
   LSettings.OnTop := CBOnTop.Checked;
   for LStr in LB_Fav.Items do LSettings.Favorites.Add(LStr);
+  for LStr in LB_History.Items do LSettings.History.Add(LStr);
   LSettings.SaveToJSONFile(TPath.GetHomePath + '\' + APPFile + '\Settings.json', TEncoding.UTF8);
   LSettings.Free;
 end;
@@ -275,9 +295,11 @@ begin
   Log('Starting Up...');
   Caption := APPTitle;
   CList := TStringList.Create;
+  CIdx := TDictionary<Integer, Integer>.Create;
   HTTPStream := TStringStream.Create;
   HTTPRaw    := Nil;
   Digger := Nil;
+  DiggerHisto := Nil;
   CreateDir(TPath.GetHomePath + '\' + APPFile );
 
   if FileExists(TPath.GetHomePath + '\' + APPFile + '\Settings.json') then
@@ -294,6 +316,7 @@ begin
         CBOnTopClick(Self);
         if not LSettings.Refresh.IsEmpty then SERefresh.Value := LSettings.Refresh.AsInteger;
         for LTVal in LSettings.Favorites do LB_Fav.AddItem(LTVal.AsString, Nil);
+        for LTVal in LSettings.History do LB_History.AddItem(LTVal.AsString, Nil);
       except end;
     finally
       LSettings.Free;
@@ -328,8 +351,10 @@ end;
 procedure TIPTVForm.FormDestroy(Sender: TObject);
 begin
   FreeAndNil(Digger);
+  FreeAndNil(DiggerHisto);
   HTTPRaw.Free;
   HTTPStream.Free;
+  CIdx.Free;
   CList.Free;
 end;
 
@@ -344,14 +369,16 @@ end;
 procedure TIPTVForm.LB_CanalsDblClick(Sender: TObject);
 var
   LIdx: integer;
+  LIdxObj: integer;
   LURL: string;
 begin
   LIdx := LB_Canals.ItemIndex;
   if LIdx = -1 then Exit;
-  LIdx := Integer(LB_Canals.ItEms.Objects[LIdx]);
-  if LIdx = -1 then Exit;
-  LURL := XORDecrypt($AF, CList[LIdx + 4]);
+  LIdxObj := Integer(LB_Canals.Items.Objects[LIdx]);
+  if LIdxObj = -1 then Exit;
+  LURL := XORDecrypt($AF, CList[LIdxObj + M3XUrl]);
   Play(LURL, CBPlayers.ItemIndex);
+  LB_History.Items.Insert(0, LB_Canals.Items[LIdx]);
 end;
 
 procedure TIPTVForm.LB_FavDblClick(Sender: TObject);
@@ -365,100 +392,14 @@ begin
   ShowChannels;
 end;
 
-procedure GetQuotedFields(AList: TStringList; const AStr: string; ASeparator: Char = ',');
+procedure TIPTVForm.LB_HistoryDblClick(Sender: TObject);
 var
-  i, StartPos: Integer;
-  InQuotes: Boolean;
-  Field: string;
+  LIdx: Integer;
 begin
-  AList.Clear;
-  i := 1;
-  StartPos := 1;
-  InQuotes := False;
-  while i <= Length(AStr) do
-  begin
-     if AStr[i] = '"' then
-      InQuotes := not InQuotes
-    else if AStr[i] = ASeparator then
-    begin
-      if not InQuotes then
-      begin
-        Field := Trim(Copy(AStr, StartPos, i - StartPos));
-        if (Length(Field) > 1) and (Field[1] = '"') and (Field[Length(Field)] = '"') then Field := Field.DeQuotedString('"');;
-        AList.Add(Field);
-        StartPos := i + 1;
-      end;
-    end;
-    Inc(i);
-  end;
-  Field := Trim(Copy(AStr, StartPos, Length(AStr) - StartPos + 1));
-  if (Length(Field) > 1) and (Field[1] = '"') and (Field[Length(Field)] = '"') then Field := Field.DeQuotedString('"');;
-  if Length(Field) > 0 then AList.Add(Field);
-end;
-
-function Parse(AList: TStringList; AIdx: integer; var AId: integer; var  ATitle: string; var ALang: string; var AType: string): boolean;
-var
-  LParts : TArray<string>;
-  LTitleParts : TArray<string>;
-  LSubParts: TStringList;
-  LLangParts: TArray<string>;
-  LName, LUrl, LStr: string;
-begin
-  Result := False;
-  LSubParts := Nil;
-  try
-  try
-   LStr      := UTF8Decode(AList[AIdx]);
-   LParts    :=  LStr.Split([','], '"', '"',  99);
-   LSubParts := TStringList.Create;
-   GetQuotedFields(LSubParts, LParts[0], ' ');
-   LName := LSubParts.Values['tvg-name'].DeQuotedString('"').Trim;
-   if LName.Trim.StartsWith('#') then Exit;
-
-    if Length(LParts) = 1 then  ATitle := LName else
-    begin
-      ATitle := LParts[1];
-      for var i := 2 to Length(LParts) - 1 do ATitle :=  ATitle + ' ' + LParts[i];
-    end;
-    ATitle := ATitle.Trim;
-    LTitleParts := ATitle.Trim.Split(['[', ']', '- ', '|', ':', '_'], 99);
-    if Length(LTitleParts) <= 1 then ATitle := LTitleParts[0].Trim else
-    begin
-      ATitle := LTitleParts[1];
-      for var i := 2 to Length(LTitleParts) - 1 do ATitle := ATitle + ', ' + LTitleParts[i];
-    end;
-    ATitle := ATitle.Trim;
-
-    LLangParts :=  LName.Split(['[', ']', ' - ', '|', ':', '_'], '"', '"', 99);
-    if (Length(LLangParts) > 1) then // and (Length(LangArray[0].Trim) <= 12) then
-    begin
-      ALang := '';  LLangParts[0] := LLangParts[0].Trim;
-      for var i := 1  to Length(LLangParts[0]) do if IsLetterOrDigit(LLangParts[0][i]) then
-        ALang :=  ALang + LLangParts[0][i];
-      if ALang.Trim.IsEmpty then
-      begin
-        if (Length(LLangParts) > 1) and LLangParts[0].Trim.IsEmpty then
-          ALang := LLangParts[1]
-        else
-          ALang := '???';
-      end;
-    end;
-    ALang := ALang.Trim;
-
-    LUrl := AList[AIdx + 1].ToLower;
-    if not TryStrToInt(TPath.GetFileNameWithoutExtension(AList[AIdx+1]), AId) then AId := 0;
-    if LUrl.Contains('/movie/') then AType := 'MOVIE'
-    else if LUrl.Contains('/series/') then AType := 'SERIE'
-    else AType := 'TV';
-
-    Result := True;
-
-  finally
-    LSubParts.Free;
-  end;
-  except
-    Result := False;
-  end;
+  LIdx := LB_History.ItemIndex;
+  if LIdx = -1 then Exit;
+  FreeAndNil(DiggerHisto);
+  DiggerHisto := TDigThread.Create(CList, '"' + LB_History.Items[LIdx] + '"', 1 , nil, OnDiggerHistoFound, nil);
 end;
 
 procedure TIPTVForm.HTTPCompleted(ASender: THTTPGetThread; IsTerminated: Boolean; IsAsync: Boolean);
@@ -466,9 +407,12 @@ var
   LIdx: integer;
   LList: TStringList;
   LTempList: TStringList;
+  LListIdx: TDictionary<Integer, Integer>;
   LTitle, LLang, LType: string;
   LId: Integer;
+  LRec: TChannelsData;
 begin
+  LTempList := Nil;
   if IsAsync then
   begin
     if not Assigned(ASender.Result) then Exit;
@@ -483,18 +427,23 @@ begin
         LTempList.Text := (TStringStream(THTTPGetThread(ASender).Stream).ReadString( THTTPGetThread(ASender).Stream.Size - 8 ));
         TStringStream(THTTPGetThread(ASender).Stream).Clear;
 
-        LList :=  TStringList.Create;;
+        LList :=  TStringList.Create;
+        LListIdx := TDictionary<Integer, Integer>.Create;
+        LRec := TChannelsData.Create;
+        LRec.List := LList;
+        LRec.Idx :=  LListIdx;
+        THTTPGetThread(ASender).UserObj := LRec;
         LList.Add(DBVersion.ToString);
-        THTTPGetThread(ASender).UserObj := LList;
         LIdx := 0;
         while LIdx < LTempList.count - 2  do
         begin
+          if csDestroying in Self.ComponentState  then Break;
           if LTempList[LIdx].ToUpper.StartsWith('#EXTINF:-1') then
           begin
             if Parse(LTempList, LIdx, LId, LTitle, LLang, LType) then
             begin
               LList.Add('');
-              LList.Add(LLang + ': ' + LTitle);
+              LListIdx.TryAdd(LId, LList.Add(LLang + ': ' + LTitle));
               LList.Add(LId.ToString);
               LList.Add(LType);
               LList.Add(LTempList[LIdx]);
@@ -513,18 +462,28 @@ begin
       end;
     except
     end;
-  end else begin // IsAsync
-    if Assigned(ASender.Result) and (ASender.Result.StatusCode = 200) then
-    begin
-       HTTPUrl := ASender.URL;
-       LList := TStringList(THTTPGetThread(ASender).UserObj);
-       FreeandNil(Digger);
-       CList.Free; CList := LList;
-       ShowChannels;
-    end else
+    end else begin // IsAsync
+
+      if not (Assigned(ASender.Result) and (ASender.Result.StatusCode = 200)) or (csDestroying in Self.ComponentState) then
+      begin
+        if Assigned(TChannelsData(THTTPGetThread(ASender).UserObj)) then
+        begin
+          TStringList(TChannelsData(THTTPGetThread(ASender).UserObj).List).Free;
+          TDictionary<Integer, Integer>(TChannelsData(THTTPGetThread(ASender).UserObj).Idx).Free;
+        end;
+      end else begin
+        LList := TStringList(TChannelsData(THTTPGetThread(ASender).UserObj).List);
+        LListIdx:= TDictionary<Integer, Integer>(TChannelsData(THTTPGetThread(ASender).UserObj).Idx);
+        HTTPUrl := ASender.URL;
+        FreeandNil(Digger);
+        FreeAndNil(DiggerHisto);
+        CList.Free; CList := LList;
+        CIdx.Free; CIdx := LListIDx;
+        ShowChannels;
+      end;
       FreeAndNil(THTTPGetThread(ASender).UserObj);
-    ProgressBar.Visible := False;
-  end;
+      ProgressBar.Visible := False;
+ end;
 end;
 
 procedure TIPTVForm.OnDoneDigging(ADigger: TDigThread);
@@ -536,6 +495,11 @@ procedure TIPTVForm.OnDiggerFound(ADigger: TDigThread; ATitle: string; AIndex: i
 begin
   LB_Canals.AddItem(ATitle, Tobject(AIndex));
   Log( LB_Canals.Count.ToString + ' Channels Found' );
+end;
+
+procedure TIPTVForm.OnDiggerHistoFound(ADigger: TDigThread; ATitle: string; AIndex: integer);
+begin
+  Play( XORDecrypt($AF, CList[AIndex + M3XUrl]), CBPlayers.ItemIndex);
 end;
 
 procedure TIPTVForm.OnStartDigging(ADigger: TDigThread);
@@ -637,6 +601,17 @@ procedure TIPTVForm.Remove1Click(Sender: TObject);
 begin
   if LB_Fav.ItemIndex > -1 then
     LB_Fav.Items.Delete(LB_Fav.ItemIndex);
+end;
+
+procedure TIPTVForm.Remove2Click(Sender: TObject);
+begin
+  LB_History.DeleteSelected;
+end;
+
+procedure TIPTVForm.RemoveAll1Click(Sender: TObject);
+begin
+  LB_History.SelectAll;
+  LB_History.DeleteSelected;
 end;
 
 end.

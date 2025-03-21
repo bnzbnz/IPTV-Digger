@@ -29,6 +29,7 @@ uses
     System.Classes
   , SysUtils
   , SyncObjs
+  , uIPTVCommon
   ;
 
 type
@@ -162,7 +163,7 @@ begin
   try
     LWords := TStringList.Create;
 
-      Synchronize( procedure begin OnStart(Self); end );
+      if Assigned(OnStart) then Synchronize( procedure begin OnStart(Self); end );
       LIneIdx := 2;
       LMax := FMax;
       LWords.Clear;
@@ -182,7 +183,7 @@ begin
           end;
           Inc(LIneIdx, 6);
       end;
-
+      if Assigned(OnDone) then Synchronize( procedure begin OnDone(Self); end );
     LWords.Free;
   Terminate;
   except

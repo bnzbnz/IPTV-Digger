@@ -21,7 +21,7 @@ object IPTVForm: TIPTVForm
     Top = 0
     Width = 292
     Height = 346
-    ActivePage = TabSheet2
+    ActivePage = TabSheet1
     Align = alClient
     TabOrder = 0
     object TabSheet2: TTabSheet
@@ -45,7 +45,9 @@ object IPTVForm: TIPTVForm
         Height = 293
         Align = alClient
         ItemHeight = 15
+        ParentShowHint = False
         PopupMenu = PPQuery
+        ShowHint = False
         TabOrder = 1
         OnDblClick = LB_CanalsDblClick
       end
@@ -64,6 +66,22 @@ object IPTVForm: TIPTVForm
         Sorted = True
         TabOrder = 0
         OnDblClick = LB_FavDblClick
+      end
+    end
+    object TabSheet4: TTabSheet
+      Caption = 'History'
+      ImageIndex = 3
+      object LB_History: TListBox
+        Left = 0
+        Top = 0
+        Width = 284
+        Height = 316
+        Align = alClient
+        ItemHeight = 15
+        MultiSelect = True
+        PopupMenu = PPHisto
+        TabOrder = 0
+        OnDblClick = LB_HistoryDblClick
       end
     end
     object TabSheet1: TTabSheet
@@ -95,9 +113,9 @@ object IPTVForm: TIPTVForm
       object Label4: TLabel
         Left = 3
         Top = 56
-        Width = 99
+        Width = 104
         Height = 15
-        Caption = 'M3U Refresh (mn.)'
+        Caption = 'M3U Refresh (mns.)'
       end
       object EM3U: TEdit
         Left = 3
@@ -183,8 +201,8 @@ object IPTVForm: TIPTVForm
     PopupMenu = PPStatusBar
   end
   object PPQuery: TPopupMenu
-    Left = 60
-    Top = 58
+    Left = 180
+    Top = 178
     object AddQuerytoFavorites1: TMenuItem
       Caption = 'Add Query to Favorites'
       OnClick = AddQuerytoFavorites1Click
@@ -208,6 +226,22 @@ object IPTVForm: TIPTVForm
     object RefreshM3UData1: TMenuItem
       Caption = 'Refresh M3U Data'
       OnClick = RefreshM3UData1Click
+    end
+  end
+  object PPHisto: TPopupMenu
+    Left = 628
+    Top = 458
+    object Open2: TMenuItem
+      Caption = 'Open'
+      OnClick = LB_HistoryDblClick
+    end
+    object Remove2: TMenuItem
+      Caption = 'Remove'
+      OnClick = Remove2Click
+    end
+    object RemoveAll1: TMenuItem
+      Caption = 'Remove All'
+      OnClick = RemoveAll1Click
     end
   end
 end
