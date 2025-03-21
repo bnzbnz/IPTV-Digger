@@ -32,6 +32,7 @@ uses
   , uThreadedHTTPGet, uDigThread, uIPTVCommon
   , RTTI, uJX4Object, uJX4List
   , System.Generics.Collections
+  , ClipBrd
   ;
 
 
@@ -95,6 +96,8 @@ type
     Open2: TMenuItem;
     Remove2: TMenuItem;
     RemoveAll1: TMenuItem;
+    N1: TMenuItem;
+    CopyURL1: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
@@ -111,6 +114,7 @@ type
     procedure LB_HistoryDblClick(Sender: TObject);
     procedure Remove2Click(Sender: TObject);
     procedure RemoveAll1Click(Sender: TObject);
+    procedure CopyURL1Click(Sender: TObject);
   private
     { Private declarations }
     procedure Log(AMsg: string; APanel: integer = 0);
@@ -210,6 +214,18 @@ begin
     Self.FormStyle := fsStayOnTop
   else
     Self.FormStyle := fsNormal;
+end;
+
+procedure TIPTVForm.CopyURL1Click(Sender: TObject);
+var
+  LIdx: integer;
+  LIdxObj: integer;
+begin
+  LIdx := LB_Canals.ItemIndex;
+  if LIdx = -1 then Exit;
+  LIdxObj := Integer(LB_Canals.Items.Objects[LIdx]);
+  if LIdxObj = -1 then Exit;
+  Clipboard.AsText := XORDecrypt($AF, CList[LIdxObj + M3XUrl]);
 end;
 
 procedure TIPTVForm.DownloadM3U(AUrl: string);

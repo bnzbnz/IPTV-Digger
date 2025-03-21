@@ -21,7 +21,7 @@ object IPTVForm: TIPTVForm
     Top = 0
     Width = 292
     Height = 346
-    ActivePage = TabSheet1
+    ActivePage = TabSheet3
     Align = alClient
     TabOrder = 0
     object TabSheet2: TTabSheet
@@ -206,6 +206,13 @@ object IPTVForm: TIPTVForm
     object AddQuerytoFavorites1: TMenuItem
       Caption = 'Add Query to Favorites'
       OnClick = AddQuerytoFavorites1Click
+    end
+    object N1: TMenuItem
+      Caption = '-'
+    end
+    object CopyURL1: TMenuItem
+      Caption = 'Copy URL'
+      OnClick = CopyURL1Click
     end
   end
   object PPFav: TPopupMenu
